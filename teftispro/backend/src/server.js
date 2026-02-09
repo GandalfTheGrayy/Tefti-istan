@@ -1791,6 +1791,6 @@ app.get('/stats/branch/:id', authenticate, async (req, res) => {
 
 // ============ SERVER START ============
 
-app.listen(PORT, () => {
-  console.log(`🚀 TeftişPro Backend sunucusu http://localhost:${PORT} adresinde çalışıyor`);
+app.listen(PORT, '0.0.0.0', () => {
+  console.log(`🚀 TeftişPro Backend sunucusu http://0.0.0.0:${PORT} adresinde çalışıyor`);
 });
