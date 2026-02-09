@@ -8,7 +8,8 @@
     <link rel="preconnect" href="https://fonts.googleapis.com">
     <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
     <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700&display=swap" rel="stylesheet">
-    <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Material+Symbols+Outlined:opsz,wght,FILL,GRAD@24,400,0,0" />
+    <link rel="stylesheet"
+        href="https://fonts.googleapis.com/css2?family=Material+Symbols+Outlined:opsz,wght,FILL,GRAD@24,400,0,0" />
     <script src="https://cdn.tailwindcss.com"></script>
     <script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.7/dist/chart.umd.min.js"></script>
     <script src="https://cdnjs.cloudflare.com/ajax/libs/jspdf/2.5.1/jspdf.umd.min.js"></script>
@@ -24,14 +25,17 @@
             <div class="flex items-center justify-between mb-6">
                 <div>
                     <h2 class="text-2xl font-bold" style="color:var(--text-primary);">Raporlar & Analiz</h2>
-                    <p class="text-sm mt-1" style="color:var(--text-muted);">Denetim verilerini gorsellerle analiz edin</p>
+                    <p class="text-sm mt-1" style="color:var(--text-muted);">Denetim verilerini gorsellerle analiz edin
+                    </p>
                 </div>
                 <div class="flex gap-2">
                     <button onclick="exportCSV()" class="tp-btn tp-btn-secondary">
-                        <span class="material-symbols-outlined">table_chart</span><span class="hidden sm:inline">CSV</span>
+                        <span class="material-symbols-outlined">table_chart</span><span
+                            class="hidden sm:inline">CSV</span>
                     </button>
                     <button onclick="exportPDFReport()" class="tp-btn tp-btn-primary">
-                        <span class="material-symbols-outlined">picture_as_pdf</span><span class="hidden sm:inline">PDF Rapor</span>
+                        <span class="material-symbols-outlined">picture_as_pdf</span><span class="hidden sm:inline">PDF
+                            Rapor</span>
                     </button>
                 </div>
             </div>
@@ -42,25 +46,66 @@
                 <div class="flex flex-wrap gap-2 mb-4">
                     <button onclick="setDatePreset('week')" class="tp-date-preset" data-preset="week">Bu Hafta</button>
                     <button onclick="setDatePreset('month')" class="tp-date-preset" data-preset="month">Bu Ay</button>
-                    <button onclick="setDatePreset('quarter')" class="tp-date-preset" data-preset="quarter">Son 3 Ay</button>
-                    <button onclick="setDatePreset('year')" class="tp-date-preset active" data-preset="year">Bu Yil</button>
+                    <button onclick="setDatePreset('quarter')" class="tp-date-preset" data-preset="quarter">Son 3
+                        Ay</button>
+                    <button onclick="setDatePreset('year')" class="tp-date-preset active" data-preset="year">Bu
+                        Yil</button>
                     <button onclick="setDatePreset('all')" class="tp-date-preset" data-preset="all">Tumu</button>
                 </div>
                 <div class="grid grid-cols-1 md:grid-cols-4 gap-4">
-                    <div><label class="tp-label">Baslangic Tarihi</label><input type="date" id="startDate" class="tp-input"></div>
-                    <div><label class="tp-label">Bitis Tarihi</label><input type="date" id="endDate" class="tp-input"></div>
-                    <div><label class="tp-label">Sirket</label><select id="companyFilter" class="tp-input tp-select"><option value="">Tumu</option></select></div>
-                    <div><label class="tp-label">Durum</label><select id="statusFilter" class="tp-input tp-select"><option value="">Tumu</option><option value="pending">Atandi</option><option value="draft">Devam Ediyor</option><option value="submitted">Gonderildi</option><option value="approved">Onaylandi</option><option value="rejected">Reddedildi</option></select></div>
+                    <div><label class="tp-label">Baslangic Tarihi</label><input type="date" id="startDate"
+                            class="tp-input"></div>
+                    <div><label class="tp-label">Bitis Tarihi</label><input type="date" id="endDate" class="tp-input">
+                    </div>
+                    <div><label class="tp-label">Sirket</label><select id="companyFilter" class="tp-input tp-select">
+                            <option value="">Tumu</option>
+                        </select></div>
+                    <div><label class="tp-label">Durum</label><select id="statusFilter" class="tp-input tp-select">
+                            <option value="">Tumu</option>
+                            <option value="pending">Atandi</option>
+                            <option value="draft">Devam Ediyor</option>
+                            <option value="submitted">Gonderildi</option>
+                            <option value="approved">Onaylandi</option>
+                            <option value="rejected">Reddedildi</option>
+                        </select></div>
                 </div>
                 <button onclick="applyFilters()" class="mt-4 tp-btn tp-btn-primary">Filtrele</button>
             </div>
 
             <!-- Summary Cards -->
             <div class="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4 mb-6">
-                <div class="tp-stat-card tp-stat-card-blue"><div class="flex items-center gap-3 mb-2"><div class="tp-stat-icon tp-icon-blue"><span class="material-symbols-outlined">assignment</span></div><span id="totalAudits" class="text-2xl font-bold" style="color:var(--text-primary);">0</span></div><p class="text-sm" style="color:var(--text-muted);">Toplam Denetim</p></div>
-                <div class="tp-stat-card tp-stat-card-green"><div class="flex items-center gap-3 mb-2"><div class="tp-stat-icon tp-icon-green"><span class="material-symbols-outlined">check_circle</span></div><span id="completedAudits" class="text-2xl font-bold" style="color:var(--text-primary);">0</span></div><p class="text-sm" style="color:var(--text-muted);">Tamamlanan</p></div>
-                <div class="tp-stat-card tp-stat-card-yellow"><div class="flex items-center gap-3 mb-2"><div class="tp-stat-icon tp-icon-yellow"><span class="material-symbols-outlined">trending_up</span></div><span id="avgScore" class="text-2xl font-bold" style="color:var(--text-primary);">0%</span></div><p class="text-sm" style="color:var(--text-muted);">Ortalama Puan</p></div>
-                <div class="tp-stat-card tp-stat-card-purple"><div class="flex items-center gap-3 mb-2"><div class="tp-stat-icon tp-icon-purple"><span class="material-symbols-outlined">speed</span></div><span id="completionRate" class="text-2xl font-bold" style="color:var(--text-primary);">0%</span></div><p class="text-sm" style="color:var(--text-muted);">Tamamlanma Orani</p></div>
+                <div class="tp-stat-card tp-stat-card-blue">
+                    <div class="flex items-center gap-3 mb-2">
+                        <div class="tp-stat-icon tp-icon-blue"><span class="material-symbols-outlined">assignment</span>
+                        </div><span id="totalAudits" class="text-2xl font-bold"
+                            style="color:var(--text-primary);">0</span>
+                    </div>
+                    <p class="text-sm" style="color:var(--text-muted);">Toplam Denetim</p>
+                </div>
+                <div class="tp-stat-card tp-stat-card-green">
+                    <div class="flex items-center gap-3 mb-2">
+                        <div class="tp-stat-icon tp-icon-green"><span
+                                class="material-symbols-outlined">check_circle</span></div><span id="completedAudits"
+                            class="text-2xl font-bold" style="color:var(--text-primary);">0</span>
+                    </div>
+                    <p class="text-sm" style="color:var(--text-muted);">Tamamlanan</p>
+                </div>
+                <div class="tp-stat-card tp-stat-card-yellow">
+                    <div class="flex items-center gap-3 mb-2">
+                        <div class="tp-stat-icon tp-icon-yellow"><span
+                                class="material-symbols-outlined">trending_up</span></div><span id="avgScore"
+                            class="text-2xl font-bold" style="color:var(--text-primary);">0%</span>
+                    </div>
+                    <p class="text-sm" style="color:var(--text-muted);">Ortalama Puan</p>
+                </div>
+                <div class="tp-stat-card tp-stat-card-purple">
+                    <div class="flex items-center gap-3 mb-2">
+                        <div class="tp-stat-icon tp-icon-purple"><span class="material-symbols-outlined">speed</span>
+                        </div><span id="completionRate" class="text-2xl font-bold"
+                            style="color:var(--text-primary);">0%</span>
+                    </div>
+                    <p class="text-sm" style="color:var(--text-muted);">Tamamlanma Orani</p>
+                </div>
             </div>
 
             <!-- Charts Row -->
@@ -89,21 +134,30 @@
                 <div class="tp-card rounded-2xl p-5">
                     <h3 class="font-semibold mb-4" style="color:var(--text-primary);">En Basarili Subeler</h3>
                     <div id="topBranches"></div>
-                    <div id="topBranchesEmpty" class="hidden text-center py-6" style="color:var(--text-muted);"><span class="material-symbols-outlined text-2xl">store</span><p class="text-sm mt-1">Veri yok</p></div>
+                    <div id="topBranchesEmpty" class="hidden text-center py-6" style="color:var(--text-muted);"><span
+                            class="material-symbols-outlined text-2xl">store</span>
+                        <p class="text-sm mt-1">Veri yok</p>
+                    </div>
                 </div>
 
                 <!-- Category Performance -->
                 <div class="tp-card rounded-2xl p-5">
                     <h3 class="font-semibold mb-4" style="color:var(--text-primary);">Kategori Performansi</h3>
                     <div id="categoryPerf"></div>
-                    <div id="categoryPerfEmpty" class="hidden text-center py-6" style="color:var(--text-muted);"><span class="material-symbols-outlined text-2xl">category</span><p class="text-sm mt-1">Veri yok</p></div>
+                    <div id="categoryPerfEmpty" class="hidden text-center py-6" style="color:var(--text-muted);"><span
+                            class="material-symbols-outlined text-2xl">category</span>
+                        <p class="text-sm mt-1">Veri yok</p>
+                    </div>
                 </div>
 
                 <!-- Auditor Performance -->
                 <div class="tp-card rounded-2xl p-5">
                     <h3 class="font-semibold mb-4" style="color:var(--text-primary);">Denetci Performansi</h3>
                     <div id="auditorPerf"></div>
-                    <div id="auditorPerfEmpty" class="hidden text-center py-6" style="color:var(--text-muted);"><span class="material-symbols-outlined text-2xl">person</span><p class="text-sm mt-1">Veri yok</p></div>
+                    <div id="auditorPerfEmpty" class="hidden text-center py-6" style="color:var(--text-muted);"><span
+                            class="material-symbols-outlined text-2xl">person</span>
+                        <p class="text-sm mt-1">Veri yok</p>
+                    </div>
                 </div>
             </div>
 
@@ -115,17 +169,31 @@
                 </div>
                 <div class="overflow-x-auto">
                     <table class="tp-table tp-table-striped">
-                        <thead><tr><th>ID</th><th>Baslik</th><th>Sube</th><th>Denetci</th><th>Puan</th><th>Durum</th><th>Tarih</th><th></th></tr></thead>
+                        <thead>
+                            <tr>
+                                <th>ID</th>
+                                <th>Baslik</th>
+                                <th>Sube</th>
+                                <th>Denetci</th>
+                                <th>Puan</th>
+                                <th>Durum</th>
+                                <th>Tarih</th>
+                                <th></th>
+                            </tr>
+                        </thead>
                         <tbody id="auditsTable"></tbody>
                     </table>
                 </div>
-                <div id="emptyState" class="hidden tp-empty-state"><span class="material-symbols-outlined">inventory_2</span><p>Filtrelere uygun denetim bulunamadi</p></div>
+                <div id="emptyState" class="hidden tp-empty-state"><span
+                        class="material-symbols-outlined">inventory_2</span>
+                    <p>Filtrelere uygun denetim bulunamadi</p>
+                </div>
             </div>
         </div>
     </main>
 
     <script>
-        const API_URL = 'http://localhost:8080';
+        const API_URL = '/api';
         const token = localStorage.getItem('token');
         if (!token) window.location.href = '/public/login.html';
         const _userRole = LAYOUT.getUserRole();
@@ -174,7 +242,7 @@
                 start = d.toISOString().split('T')[0];
                 end = now.toISOString().split('T')[0];
             } else if (preset === 'month') {
-                start = `${now.getFullYear()}-${String(now.getMonth()+1).padStart(2,'0')}-01`;
+                start = `${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, '0')}-01`;
                 end = now.toISOString().split('T')[0];
             } else if (preset === 'quarter') {
                 const d = new Date(now); d.setMonth(d.getMonth() - 3);
@@ -481,7 +549,7 @@
             const { jsPDF } = window.jspdf;
             const doc = new jsPDF('p', 'mm', 'a4');
             const pw = 210, m = 15;
-            const ct = (t) => !t ? '' : t.replace(/[ıİğĞüÜşŞöÖçÇ]/g, c => ({ 'ı':'i','İ':'I','ğ':'g','Ğ':'G','ü':'u','Ü':'U','ş':'s','Ş':'S','ö':'o','Ö':'O','ç':'c','Ç':'C' })[c] || c);
+            const ct = (t) => !t ? '' : t.replace(/[ıİğĞüÜşŞöÖçÇ]/g, c => ({ 'ı': 'i', 'İ': 'I', 'ğ': 'g', 'Ğ': 'G', 'ü': 'u', 'Ü': 'U', 'ş': 's', 'Ş': 'S', 'ö': 'o', 'Ö': 'O', 'ç': 'c', 'Ç': 'C' })[c] || c);
 
             // Header
             doc.setFillColor(15, 23, 42);
@@ -489,7 +557,7 @@
             doc.setFontSize(20); doc.setTextColor(255, 255, 255);
             doc.text('TeftisPro - Rapor Ozeti', m, 22);
             doc.setFontSize(10); doc.setTextColor(148, 163, 184);
-            doc.text(new Date().toLocaleDateString('tr-TR', { day:'numeric', month:'long', year:'numeric' }), pw - m, 22, { align: 'right' });
+            doc.text(new Date().toLocaleDateString('tr-TR', { day: 'numeric', month: 'long', year: 'numeric' }), pw - m, 22, { align: 'right' });
 
             // Summary
             const a = filteredAudits;

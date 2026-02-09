@@ -8,7 +8,8 @@
     <link rel="preconnect" href="https://fonts.googleapis.com">
     <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
     <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700&display=swap" rel="stylesheet">
-    <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Material+Symbols+Outlined:opsz,wght,FILL,GRAD@24,400,0,0" />
+    <link rel="stylesheet"
+        href="https://fonts.googleapis.com/css2?family=Material+Symbols+Outlined:opsz,wght,FILL,GRAD@24,400,0,0" />
     <script src="https://cdn.tailwindcss.com"></script>
     <link rel="stylesheet" href="/public/styles.css">
     <script src="/public/layout.js"></script>
@@ -30,18 +31,35 @@
 
             <!-- Stats -->
             <div class="grid grid-cols-2 lg:grid-cols-5 gap-4 mb-8">
-                <div class="tp-stat-card text-center"><p class="text-2xl font-bold" style="color:var(--text-primary);" id="totalUsers">0</p><p class="text-sm" style="color:var(--text-muted);">Toplam</p></div>
-                <div class="tp-stat-card text-center"><p class="text-2xl font-bold" style="color:#3b82f6;" id="adminCount">0</p><p class="text-sm" style="color:var(--text-muted);">Admin</p></div>
-                <div class="tp-stat-card text-center"><p class="text-2xl font-bold" style="color:#10b981;" id="fieldCount">0</p><p class="text-sm" style="color:var(--text-muted);">Saha</p></div>
-                <div class="tp-stat-card text-center"><p class="text-2xl font-bold" style="color:#f59e0b;" id="planlamaciCount">0</p><p class="text-sm" style="color:var(--text-muted);">Planlamacı</p></div>
-                <div class="tp-stat-card text-center"><p class="text-2xl font-bold" style="color:#8b5cf6;" id="reviewerCount">0</p><p class="text-sm" style="color:var(--text-muted);">Onaylayan</p></div>
+                <div class="tp-stat-card text-center">
+                    <p class="text-2xl font-bold" style="color:var(--text-primary);" id="totalUsers">0</p>
+                    <p class="text-sm" style="color:var(--text-muted);">Toplam</p>
+                </div>
+                <div class="tp-stat-card text-center">
+                    <p class="text-2xl font-bold" style="color:#3b82f6;" id="adminCount">0</p>
+                    <p class="text-sm" style="color:var(--text-muted);">Admin</p>
+                </div>
+                <div class="tp-stat-card text-center">
+                    <p class="text-2xl font-bold" style="color:#10b981;" id="fieldCount">0</p>
+                    <p class="text-sm" style="color:var(--text-muted);">Saha</p>
+                </div>
+                <div class="tp-stat-card text-center">
+                    <p class="text-2xl font-bold" style="color:#f59e0b;" id="planlamaciCount">0</p>
+                    <p class="text-sm" style="color:var(--text-muted);">Planlamacı</p>
+                </div>
+                <div class="tp-stat-card text-center">
+                    <p class="text-2xl font-bold" style="color:#8b5cf6;" id="reviewerCount">0</p>
+                    <p class="text-sm" style="color:var(--text-muted);">Onaylayan</p>
+                </div>
             </div>
 
             <!-- Search -->
             <div class="tp-card rounded-2xl p-4 mb-6">
                 <div class="relative">
-                    <span class="material-symbols-outlined absolute left-4 top-1/2 -translate-y-1/2" style="color:var(--text-muted);">search</span>
-                    <input type="text" id="searchInput" placeholder="Kullanıcı ara..." class="tp-input" style="padding-left:3rem;">
+                    <span class="material-symbols-outlined absolute left-4 top-1/2 -translate-y-1/2"
+                        style="color:var(--text-muted);">search</span>
+                    <input type="text" id="searchInput" placeholder="Kullanıcı ara..." class="tp-input"
+                        style="padding-left:3rem;">
                 </div>
             </div>
 
@@ -49,11 +67,20 @@
             <div class="tp-card rounded-2xl overflow-hidden">
                 <div class="overflow-x-auto">
                     <table class="tp-table">
-                        <thead><tr><th>Kullanıcı</th><th>Rol</th><th>Kayıt Tarihi</th><th>İşlemler</th></tr></thead>
+                        <thead>
+                            <tr>
+                                <th>Kullanıcı</th>
+                                <th>Rol</th>
+                                <th>Kayıt Tarihi</th>
+                                <th>İşlemler</th>
+                            </tr>
+                        </thead>
                         <tbody id="usersTableBody"></tbody>
                     </table>
                 </div>
-                <div id="loadingState" class="p-12 text-center"><div class="tp-spinner mx-auto"></div></div>
+                <div id="loadingState" class="p-12 text-center">
+                    <div class="tp-spinner mx-auto"></div>
+                </div>
             </div>
         </div>
     </main>
@@ -61,11 +88,26 @@
     <!-- Add/Edit Modal -->
     <div id="userModal" class="tp-modal-overlay">
         <div class="tp-modal max-w-md">
-            <div class="tp-modal-header"><h3 id="modalTitle" class="tp-modal-title">Yeni Kullanıcı</h3><button onclick="closeModal()" class="tp-btn-ghost"><span class="material-symbols-outlined">close</span></button></div>
+            <div class="tp-modal-header">
+                <h3 id="modalTitle" class="tp-modal-title">Yeni Kullanıcı</h3><button onclick="closeModal()"
+                    class="tp-btn-ghost"><span class="material-symbols-outlined">close</span></button>
+            </div>
             <form id="userForm" class="space-y-4">
-                <div><label class="tp-label">E-posta</label><input type="email" id="userEmail" required class="tp-input" placeholder="ornek@email.com"></div>
-                <div><label class="tp-label">Şifre</label><input type="password" id="userPassword" class="tp-input" placeholder="••••••••"><p class="text-xs mt-1" style="color:var(--text-muted);">Düzenlerken boş bırakırsanız şifre değişmez</p></div>
-                <div><label class="tp-label">Rol</label><select id="userRole" required class="tp-input tp-select"><option value="field">Saha Denetçisi</option><option value="planlamacı">Planlamacı</option><option value="gözden_geçiren">Gözden Geçiren</option><option value="firma_sahibi">Firma Sahibi</option><option value="sube_kullanici">Şube Kullanıcı</option><option value="admin">Admin</option></select></div>
+                <div><label class="tp-label">E-posta</label><input type="email" id="userEmail" required class="tp-input"
+                        placeholder="ornek@email.com"></div>
+                <div><label class="tp-label">Şifre</label><input type="password" id="userPassword" class="tp-input"
+                        placeholder="••••••••">
+                    <p class="text-xs mt-1" style="color:var(--text-muted);">Düzenlerken boş bırakırsanız şifre değişmez
+                    </p>
+                </div>
+                <div><label class="tp-label">Rol</label><select id="userRole" required class="tp-input tp-select">
+                        <option value="field">Saha Denetçisi</option>
+                        <option value="planlamacı">Planlamacı</option>
+                        <option value="gözden_geçiren">Gözden Geçiren</option>
+                        <option value="firma_sahibi">Firma Sahibi</option>
+                        <option value="sube_kullanici">Şube Kullanıcı</option>
+                        <option value="admin">Admin</option>
+                    </select></div>
                 <button type="submit" class="w-full tp-btn tp-btn-primary py-3">Kaydet</button>
             </form>
         </div>
@@ -75,16 +117,22 @@
     <div id="deleteModal" class="tp-modal-overlay">
         <div class="tp-modal max-w-md">
             <div class="flex items-center gap-3 mb-4">
-                <div class="w-12 h-12 rounded-full tp-icon-red flex items-center justify-center"><span class="material-symbols-outlined">warning</span></div>
-                <div><h3 class="tp-modal-title">Kullanıcıyı Sil</h3><p class="text-sm" style="color:var(--text-muted);">Bu işlem geri alınamaz</p></div>
+                <div class="w-12 h-12 rounded-full tp-icon-red flex items-center justify-center"><span
+                        class="material-symbols-outlined">warning</span></div>
+                <div>
+                    <h3 class="tp-modal-title">Kullanıcıyı Sil</h3>
+                    <p class="text-sm" style="color:var(--text-muted);">Bu işlem geri alınamaz</p>
+                </div>
             </div>
             <p class="mb-6" style="color:var(--text-secondary);">Bu kullanıcıyı silmek istediğinizden emin misiniz?</p>
-            <div class="flex gap-3"><button onclick="closeDeleteModal()" class="flex-1 tp-btn tp-btn-secondary">İptal</button><button onclick="confirmDelete()" class="flex-1 tp-btn" style="background:#ef4444;color:#fff;">Sil</button></div>
+            <div class="flex gap-3"><button onclick="closeDeleteModal()"
+                    class="flex-1 tp-btn tp-btn-secondary">İptal</button><button onclick="confirmDelete()"
+                    class="flex-1 tp-btn" style="background:#ef4444;color:#fff;">Sil</button></div>
         </div>
     </div>
 
     <script>
-        const API_URL = 'http://localhost:8080';
+        const API_URL = '/api';
         const token = localStorage.getItem('token');
         const currentUser = JSON.parse(localStorage.getItem('user') || '{}');
         const currentRole = typeof currentUser.role === 'object' ? currentUser.role.name : currentUser.role;

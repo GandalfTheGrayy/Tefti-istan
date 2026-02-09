@@ -9,7 +9,8 @@
     <link rel="preconnect" href="https://fonts.googleapis.com">
     <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
     <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700&display=swap" rel="stylesheet">
-    <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Material+Symbols+Outlined:opsz,wght,FILL,GRAD@24,400,0,0" />
+    <link rel="stylesheet"
+        href="https://fonts.googleapis.com/css2?family=Material+Symbols+Outlined:opsz,wght,FILL,GRAD@24,400,0,0" />
     <script src="https://cdn.tailwindcss.com"></script>
     <link rel="stylesheet" href="/public/styles.css">
     <script src="/public/layout.js"></script>
@@ -18,14 +19,16 @@
 <body data-custom-header>
     <main>
         <!-- Inline Header for this page -->
-        <div class="sticky top-0 z-30 backdrop-blur-md" style="background:var(--bg-header);border-bottom:1px solid var(--border-color);" id="pageHeader">
+        <div class="sticky top-0 z-30 backdrop-blur-md"
+            style="background:var(--bg-header);border-bottom:1px solid var(--border-color);" id="pageHeader">
             <div class="flex items-center justify-between px-4 lg:px-8 py-3">
                 <div class="flex items-center gap-4">
                     <a href="/public/kontrol_paneli.html" class="tp-btn-ghost">
                         <span class="material-symbols-outlined">arrow_back</span>
                     </a>
                     <div>
-                        <h1 id="auditTitle" class="text-lg font-semibold" style="color:var(--text-primary);">Denetim</h1>
+                        <h1 id="auditTitle" class="text-lg font-semibold" style="color:var(--text-primary);">Denetim
+                        </h1>
                         <p id="auditInfo" class="text-sm" style="color:var(--text-muted);">Yükleniyor...</p>
                     </div>
                 </div>
@@ -42,7 +45,8 @@
             </div>
             <!-- Progress Bar -->
             <div class="h-1" style="background:var(--bg-hover);">
-                <div id="progressBar" class="h-full transition-all duration-300" style="width:0%;background:var(--color-accent);"></div>
+                <div id="progressBar" class="h-full transition-all duration-300"
+                    style="width:0%;background:var(--color-accent);"></div>
             </div>
         </div>
 
@@ -70,14 +74,20 @@
         <div class="tp-modal max-w-lg">
             <div class="tp-modal-header">
                 <h3 class="tp-modal-title">Denetimi Tamamla</h3>
-                <button onclick="closeSignatureModal()" class="tp-btn-ghost"><span class="material-symbols-outlined">close</span></button>
+                <button onclick="closeSignatureModal()" class="tp-btn-ghost"><span
+                        class="material-symbols-outlined">close</span></button>
             </div>
             <div class="flex gap-2 mb-4 p-1 rounded-xl" style="background:var(--bg-input);">
-                <button id="sigTabauditor" onclick="switchSignatureTab('auditor')" class="flex-1 py-2 rounded-lg text-sm font-medium transition-colors" style="border:1px solid transparent;">Denetçi</button>
-                <button id="sigTabclient" onclick="switchSignatureTab('client')" class="flex-1 py-2 rounded-lg text-sm font-medium transition-colors" style="border:1px solid transparent;">Karşı Taraf</button>
+                <button id="sigTabauditor" onclick="switchSignatureTab('auditor')"
+                    class="flex-1 py-2 rounded-lg text-sm font-medium transition-colors"
+                    style="border:1px solid transparent;">Denetçi</button>
+                <button id="sigTabclient" onclick="switchSignatureTab('client')"
+                    class="flex-1 py-2 rounded-lg text-sm font-medium transition-colors"
+                    style="border:1px solid transparent;">Karşı Taraf</button>
             </div>
             <p id="signatureTitle" class="text-sm mb-2 text-center" style="color:var(--text-muted);">İmza Alanı</p>
-            <div class="bg-white rounded-xl p-2 mb-4"><canvas id="signatureCanvas" class="w-full h-48 cursor-crosshair touch-none"></canvas></div>
+            <div class="bg-white rounded-xl p-2 mb-4"><canvas id="signatureCanvas"
+                    class="w-full h-48 cursor-crosshair touch-none"></canvas></div>
             <div class="flex gap-3">
                 <button onclick="clearSignature()" class="flex-1 tp-btn tp-btn-secondary">Temizle</button>
                 <button onclick="saveCurrentSignature()" class="flex-1 tp-btn tp-btn-primary">Kaydet ve İlerle</button>
@@ -90,12 +100,16 @@
         <div class="tp-modal max-w-md">
             <div class="tp-modal-header">
                 <h3 class="tp-modal-title">Fotoğraf Yükle</h3>
-                <button onclick="closePhotoModal()" class="tp-btn-ghost"><span class="material-symbols-outlined">close</span></button>
+                <button onclick="closePhotoModal()" class="tp-btn-ghost"><span
+                        class="material-symbols-outlined">close</span></button>
             </div>
             <input type="file" id="photoInput" accept="image/*" class="hidden" onchange="uploadPhoto()">
-            <div onclick="document.getElementById('photoInput').click()" class="border-2 border-dashed rounded-xl p-8 text-center cursor-pointer transition-colors" style="border-color:var(--border-color);"
-                 onmouseover="this.style.borderColor='var(--color-accent)'" onmouseout="this.style.borderColor='var(--border-color)'">
-                <span class="material-symbols-outlined text-4xl mb-2" style="color:var(--text-muted);">add_photo_alternate</span>
+            <div onclick="document.getElementById('photoInput').click()"
+                class="border-2 border-dashed rounded-xl p-8 text-center cursor-pointer transition-colors"
+                style="border-color:var(--border-color);" onmouseover="this.style.borderColor='var(--color-accent)'"
+                onmouseout="this.style.borderColor='var(--border-color)'">
+                <span class="material-symbols-outlined text-4xl mb-2"
+                    style="color:var(--text-muted);">add_photo_alternate</span>
                 <p style="color:var(--text-secondary);">Fotoğraf seçmek için tıklayın</p>
             </div>
             <div id="uploadedPhotos" class="mt-4 grid grid-cols-3 gap-2"></div>
@@ -103,7 +117,7 @@
     </div>
 
     <script>
-        const API_URL = 'http://localhost:8080';
+        const API_URL = '/api';
         const token = localStorage.getItem('token');
         if (!token) window.location.href = '/public/login.html';
         // Sayfa bazlı rol kontrolü: sadece field ve admin cevaplama yapabilir

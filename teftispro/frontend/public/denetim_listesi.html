@@ -9,7 +9,8 @@
     <link rel="preconnect" href="https://fonts.googleapis.com">
     <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
     <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700&display=swap" rel="stylesheet">
-    <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Material+Symbols+Outlined:opsz,wght,FILL,GRAD@24,400,0,0" />
+    <link rel="stylesheet"
+        href="https://fonts.googleapis.com/css2?family=Material+Symbols+Outlined:opsz,wght,FILL,GRAD@24,400,0,0" />
     <script src="https://cdn.tailwindcss.com"></script>
     <link rel="stylesheet" href="/public/styles.css">
     <script src="/public/layout.js"></script>
@@ -35,8 +36,10 @@
                 <div class="flex flex-wrap gap-4">
                     <div class="flex-1 min-w-[200px]">
                         <div class="relative">
-                            <span class="material-symbols-outlined absolute left-4 top-1/2 -translate-y-1/2" style="color:var(--text-muted);">search</span>
-                            <input type="text" id="searchInput" placeholder="Denetim ara..." class="tp-input" style="padding-left:3rem;">
+                            <span class="material-symbols-outlined absolute left-4 top-1/2 -translate-y-1/2"
+                                style="color:var(--text-muted);">search</span>
+                            <input type="text" id="searchInput" placeholder="Denetim ara..." class="tp-input"
+                                style="padding-left:3rem;">
                         </div>
                     </div>
                     <select id="statusFilter" class="tp-input tp-select" style="width:auto;">
@@ -83,9 +86,11 @@
                     <p class="mt-4" style="color:var(--text-muted);">Yükleniyor...</p>
                 </div>
 
-                <div id="pagination" class="hidden flex items-center justify-between p-4" style="border-top:1px solid var(--border-color);">
+                <div id="pagination" class="hidden flex items-center justify-between p-4"
+                    style="border-top:1px solid var(--border-color);">
                     <p class="text-sm" style="color:var(--text-muted);">
-                        <span id="showingFrom">1</span>-<span id="showingTo">10</span> / <span id="totalCount">0</span> denetim
+                        <span id="showingFrom">1</span>-<span id="showingTo">10</span> / <span id="totalCount">0</span>
+                        denetim
                     </p>
                     <div class="flex gap-2">
                         <button onclick="prevPage()" class="tp-btn tp-btn-secondary" id="prevBtn" disabled>
@@ -115,13 +120,14 @@
             <p class="mb-6" style="color:var(--text-secondary);">Bu denetimi silmek istediğinizden emin misiniz?</p>
             <div class="flex gap-3">
                 <button onclick="closeDeleteModal()" class="flex-1 tp-btn tp-btn-secondary">İptal</button>
-                <button onclick="confirmDelete()" class="flex-1 tp-btn tp-btn-danger" style="background:rgba(239,68,68,0.1);">Sil</button>
+                <button onclick="confirmDelete()" class="flex-1 tp-btn tp-btn-danger"
+                    style="background:rgba(239,68,68,0.1);">Sil</button>
             </div>
         </div>
     </div>
 
     <script>
-        const API_URL = 'http://localhost:8080';
+        const API_URL = '/api';
         const token = localStorage.getItem('token');
         const user = JSON.parse(localStorage.getItem('user') || '{}');
         const userRole = typeof user.role === 'object' ? user.role.name : user.role;

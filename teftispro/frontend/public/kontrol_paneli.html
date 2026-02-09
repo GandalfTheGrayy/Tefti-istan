@@ -9,7 +9,8 @@
     <link rel="preconnect" href="https://fonts.googleapis.com">
     <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
     <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700&display=swap" rel="stylesheet">
-    <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Material+Symbols+Outlined:opsz,wght,FILL,GRAD@24,400,0,0" />
+    <link rel="stylesheet"
+        href="https://fonts.googleapis.com/css2?family=Material+Symbols+Outlined:opsz,wght,FILL,GRAD@24,400,0,0" />
     <script src="https://cdn.tailwindcss.com"></script>
     <link rel="stylesheet" href="/public/styles.css">
     <script src="/public/layout.js"></script>
@@ -23,11 +24,14 @@
             <!-- Welcome -->
             <div class="mb-8 flex items-center justify-between">
                 <div>
-                    <h2 class="text-2xl font-bold" style="color:var(--text-primary);" id="greetingText">Hoş Geldiniz!</h2>
+                    <h2 class="text-2xl font-bold" style="color:var(--text-primary);" id="greetingText">Hoş Geldiniz!
+                    </h2>
                     <p class="mt-1" style="color:var(--text-muted);" id="dateText">Bugünkü denetim özetiniz aşağıda.</p>
                 </div>
-                <div class="hidden sm:flex items-center gap-2 px-4 py-2 rounded-xl" style="background:var(--bg-card);border:1px solid var(--border-color);">
-                    <span class="material-symbols-outlined text-[18px]" style="color:var(--text-muted);">calendar_today</span>
+                <div class="hidden sm:flex items-center gap-2 px-4 py-2 rounded-xl"
+                    style="background:var(--bg-card);border:1px solid var(--border-color);">
+                    <span class="material-symbols-outlined text-[18px]"
+                        style="color:var(--text-muted);">calendar_today</span>
                     <span class="text-sm font-medium" style="color:var(--text-secondary);" id="todayDate"></span>
                 </div>
             </div>
@@ -97,7 +101,8 @@
                 <div class="flex items-center justify-between p-6" style="border-bottom:1px solid var(--border-color);">
                     <h3 class="text-lg font-semibold" style="color:var(--text-primary);">Son Denetimler</h3>
                     <div class="flex items-center gap-3">
-                        <a href="/public/denetim_listesi.html" class="text-sm font-medium" style="color:var(--color-accent);">Tümünü Gör</a>
+                        <a href="/public/denetim_listesi.html" class="text-sm font-medium"
+                            style="color:var(--color-accent);">Tümünü Gör</a>
                         <button id="newAuditBtn" onclick="createNewAudit()" class="hidden tp-btn tp-btn-primary">
                             <span class="material-symbols-outlined text-lg">add</span>
                             <span class="hidden sm:inline">Yeni Denetim</span>
@@ -170,7 +175,7 @@
     </main>
 
     <script>
-        const API_URL = 'http://localhost:8080';
+        const API_URL = '/api';
         let currentUser = null;
         let currentUserRole = '';
 

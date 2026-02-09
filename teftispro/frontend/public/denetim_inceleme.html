@@ -9,7 +9,8 @@
     <link rel="preconnect" href="https://fonts.googleapis.com">
     <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
     <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700&display=swap" rel="stylesheet">
-    <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Material+Symbols+Outlined:opsz,wght,FILL,GRAD@24,400,0,0" />
+    <link rel="stylesheet"
+        href="https://fonts.googleapis.com/css2?family=Material+Symbols+Outlined:opsz,wght,FILL,GRAD@24,400,0,0" />
     <script src="https://cdn.tailwindcss.com"></script>
     <script src="https://cdnjs.cloudflare.com/ajax/libs/jspdf/2.5.1/jspdf.umd.min.js"></script>
     <script src="https://cdnjs.cloudflare.com/ajax/libs/jspdf-autotable/3.8.2/jspdf.plugin.autotable.min.js"></script>
@@ -20,22 +21,34 @@
 <body data-custom-header>
     <main>
         <!-- Inline Header -->
-        <div class="sticky top-0 z-30 backdrop-blur-md" style="background:var(--bg-header);border-bottom:1px solid var(--border-color);" id="pageHeader">
+        <div class="sticky top-0 z-30 backdrop-blur-md"
+            style="background:var(--bg-header);border-bottom:1px solid var(--border-color);" id="pageHeader">
             <div class="flex items-center justify-between px-4 lg:px-8 py-3">
                 <div class="flex items-center gap-4">
-                    <a href="/public/denetim_listesi.html" class="tp-btn-ghost"><span class="material-symbols-outlined">arrow_back</span></a>
+                    <a href="/public/denetim_listesi.html" class="tp-btn-ghost"><span
+                            class="material-symbols-outlined">arrow_back</span></a>
                     <div>
-                        <h1 id="auditTitle" class="text-lg font-semibold" style="color:var(--text-primary);">Denetim İnceleme</h1>
+                        <h1 id="auditTitle" class="text-lg font-semibold" style="color:var(--text-primary);">Denetim
+                            İnceleme</h1>
                         <p id="auditInfo" class="text-sm" style="color:var(--text-muted);">Yükleniyor...</p>
                     </div>
                 </div>
                 <div class="flex items-center gap-2">
-                    <button onclick="downloadPDF('general')" title="Genel Rapor PDF" class="tp-btn tp-btn-secondary py-2 px-3"><span class="material-symbols-outlined">picture_as_pdf</span></button>
-                    <button onclick="downloadPDF('nonconformity')" title="Uygunsuzluk Raporu" class="tp-btn tp-btn-danger py-2 px-3"><span class="material-symbols-outlined">warning</span></button>
-                    <button onclick="openShareModal()" class="tp-btn tp-btn-secondary py-2 px-3"><span class="material-symbols-outlined">share</span></button>
+                    <button onclick="downloadPDF('general')" title="Genel Rapor PDF"
+                        class="tp-btn tp-btn-secondary py-2 px-3"><span
+                            class="material-symbols-outlined">picture_as_pdf</span></button>
+                    <button onclick="downloadPDF('nonconformity')" title="Uygunsuzluk Raporu"
+                        class="tp-btn tp-btn-danger py-2 px-3"><span
+                            class="material-symbols-outlined">warning</span></button>
+                    <button onclick="openShareModal()" class="tp-btn tp-btn-secondary py-2 px-3"><span
+                            class="material-symbols-outlined">share</span></button>
                     <div id="reviewActions" class="hidden flex gap-2">
-                        <button onclick="reviewAudit('reject')" class="tp-btn tp-btn-danger"><span class="material-symbols-outlined">close</span><span class="hidden sm:inline">Reddet</span></button>
-                        <button onclick="reviewAudit('approve')" class="tp-btn tp-btn-primary"><span class="material-symbols-outlined">check</span><span class="hidden sm:inline">Onayla</span></button>
+                        <button onclick="reviewAudit('reject')" class="tp-btn tp-btn-danger"><span
+                                class="material-symbols-outlined">close</span><span
+                                class="hidden sm:inline">Reddet</span></button>
+                        <button onclick="reviewAudit('approve')" class="tp-btn tp-btn-primary"><span
+                                class="material-symbols-outlined">check</span><span
+                                class="hidden sm:inline">Onayla</span></button>
                     </div>
                 </div>
             </div>
@@ -47,26 +60,39 @@
                 <div class="tp-card rounded-2xl p-6 flex items-center gap-6">
                     <div class="relative">
                         <svg class="progress-ring w-24 h-24" viewBox="0 0 100 100">
-                            <circle stroke="var(--border-color)" stroke-width="8" fill="transparent" r="42" cx="50" cy="50" />
-                            <circle id="progressCircle" class="progress-ring__circle" stroke-width="8" fill="transparent" r="42" cx="50" cy="50" stroke-linecap="round" stroke-dasharray="264" stroke-dashoffset="264" />
+                            <circle stroke="var(--border-color)" stroke-width="8" fill="transparent" r="42" cx="50"
+                                cy="50" />
+                            <circle id="progressCircle" class="progress-ring__circle" stroke-width="8"
+                                fill="transparent" r="42" cx="50" cy="50" stroke-linecap="round" stroke-dasharray="264"
+                                stroke-dashoffset="264" />
                         </svg>
                         <div class="absolute inset-0 flex items-center justify-center">
-                            <span id="scorePercent" class="text-2xl font-bold" style="color:var(--text-primary);">0%</span>
+                            <span id="scorePercent" class="text-2xl font-bold"
+                                style="color:var(--text-primary);">0%</span>
                         </div>
                     </div>
                     <div>
                         <p class="text-sm" style="color:var(--text-muted);">Genel Puan</p>
-                        <p style="color:var(--text-primary);"><span id="earnedPoints">0</span> / <span id="totalPoints">0</span> puan</p>
+                        <p style="color:var(--text-primary);"><span id="earnedPoints">0</span> / <span
+                                id="totalPoints">0</span> puan</p>
                     </div>
                 </div>
                 <div class="tp-card rounded-2xl p-6">
                     <div class="flex items-center gap-4 mb-4">
-                        <div class="tp-stat-icon tp-icon-green"><span class="material-symbols-outlined">person</span></div>
-                        <div><p class="text-sm" style="color:var(--text-muted);">Denetçi</p><p id="auditorName" class="font-medium" style="color:var(--text-primary);">-</p></div>
+                        <div class="tp-stat-icon tp-icon-green"><span class="material-symbols-outlined">person</span>
+                        </div>
+                        <div>
+                            <p class="text-sm" style="color:var(--text-muted);">Denetçi</p>
+                            <p id="auditorName" class="font-medium" style="color:var(--text-primary);">-</p>
+                        </div>
                     </div>
                     <div class="flex items-center gap-4">
-                        <div class="tp-stat-icon tp-icon-blue"><span class="material-symbols-outlined">calendar_today</span></div>
-                        <div><p class="text-sm" style="color:var(--text-muted);">Tarih</p><p id="auditDate" class="font-medium" style="color:var(--text-primary);">-</p></div>
+                        <div class="tp-stat-icon tp-icon-blue"><span
+                                class="material-symbols-outlined">calendar_today</span></div>
+                        <div>
+                            <p class="text-sm" style="color:var(--text-muted);">Tarih</p>
+                            <p id="auditDate" class="font-medium" style="color:var(--text-primary);">-</p>
+                        </div>
                     </div>
                 </div>
                 <div class="tp-card rounded-2xl p-6">
@@ -74,7 +100,8 @@
                         <p class="text-sm" style="color:var(--text-muted);">Durum</p>
                         <span id="statusBadge" class="tp-badge tp-badge-draft">Taslak</span>
                     </div>
-                    <div id="revisionNote" class="hidden mt-4 p-3 rounded-lg" style="background:rgba(245,158,11,0.08);border:1px solid rgba(245,158,11,0.2);">
+                    <div id="revisionNote" class="hidden mt-4 p-3 rounded-lg"
+                        style="background:rgba(245,158,11,0.08);border:1px solid rgba(245,158,11,0.2);">
                         <p class="text-sm font-medium" style="color:#f59e0b;">Revizyon Notu:</p>
                         <p id="revisionNoteText" class="text-sm mt-1" style="color:var(--text-secondary);"></p>
                     </div>
@@ -97,27 +124,49 @@
             <div id="tabIssues" class="tab-content hidden space-y-4"></div>
             <div id="tabPhotos" class="tab-content hidden">
                 <div id="photosGrid" class="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-4 gap-4"></div>
-                <div id="noPhotos" class="hidden tp-empty-state"><span class="material-symbols-outlined">photo_library</span><p>Fotoğraf bulunmuyor</p></div>
+                <div id="noPhotos" class="hidden tp-empty-state"><span
+                        class="material-symbols-outlined">photo_library</span>
+                    <p>Fotoğraf bulunmuyor</p>
+                </div>
             </div>
             <div id="tabCategories" class="tab-content hidden space-y-4"></div>
 
-            <div id="loadingState" class="text-center py-12"><div class="tp-spinner mx-auto"></div><p class="mt-4" style="color:var(--text-muted);">Yükleniyor...</p></div>
+            <div id="loadingState" class="text-center py-12">
+                <div class="tp-spinner mx-auto"></div>
+                <p class="mt-4" style="color:var(--text-muted);">Yükleniyor...</p>
+            </div>
         </div>
     </main>
 
     <!-- Share Modal -->
     <div id="shareModal" class="tp-modal-overlay">
         <div class="tp-modal max-w-md">
-            <div class="tp-modal-header"><h3 class="tp-modal-title">Paylaş</h3><button onclick="closeShareModal()" class="tp-btn-ghost"><span class="material-symbols-outlined">close</span></button></div>
+            <div class="tp-modal-header">
+                <h3 class="tp-modal-title">Paylaş</h3><button onclick="closeShareModal()" class="tp-btn-ghost"><span
+                        class="material-symbols-outlined">close</span></button>
+            </div>
             <div class="space-y-3">
-                <button onclick="shareWhatsApp()" class="w-full flex items-center gap-4 p-4 rounded-xl transition-colors" style="background:var(--bg-input);" onmouseover="this.style.background='var(--bg-hover)'" onmouseout="this.style.background='var(--bg-input)'">
-                    <div class="w-10 h-10 rounded-full bg-green-500 flex items-center justify-center"><span class="material-symbols-outlined text-white">chat</span></div><span style="color:var(--text-primary);">WhatsApp</span>
+                <button onclick="shareWhatsApp()"
+                    class="w-full flex items-center gap-4 p-4 rounded-xl transition-colors"
+                    style="background:var(--bg-input);" onmouseover="this.style.background='var(--bg-hover)'"
+                    onmouseout="this.style.background='var(--bg-input)'">
+                    <div class="w-10 h-10 rounded-full bg-green-500 flex items-center justify-center"><span
+                            class="material-symbols-outlined text-white">chat</span></div><span
+                        style="color:var(--text-primary);">WhatsApp</span>
                 </button>
-                <button onclick="shareEmail()" class="w-full flex items-center gap-4 p-4 rounded-xl transition-colors" style="background:var(--bg-input);" onmouseover="this.style.background='var(--bg-hover)'" onmouseout="this.style.background='var(--bg-input)'">
-                    <div class="w-10 h-10 rounded-full bg-blue-500 flex items-center justify-center"><span class="material-symbols-outlined text-white">email</span></div><span style="color:var(--text-primary);">E-posta</span>
+                <button onclick="shareEmail()" class="w-full flex items-center gap-4 p-4 rounded-xl transition-colors"
+                    style="background:var(--bg-input);" onmouseover="this.style.background='var(--bg-hover)'"
+                    onmouseout="this.style.background='var(--bg-input)'">
+                    <div class="w-10 h-10 rounded-full bg-blue-500 flex items-center justify-center"><span
+                            class="material-symbols-outlined text-white">email</span></div><span
+                        style="color:var(--text-primary);">E-posta</span>
                 </button>
-                <button onclick="copyLink()" class="w-full flex items-center gap-4 p-4 rounded-xl transition-colors" style="background:var(--bg-input);" onmouseover="this.style.background='var(--bg-hover)'" onmouseout="this.style.background='var(--bg-input)'">
-                    <div class="w-10 h-10 rounded-full bg-purple-500 flex items-center justify-center"><span class="material-symbols-outlined text-white">link</span></div><span style="color:var(--text-primary);">Link Kopyala</span>
+                <button onclick="copyLink()" class="w-full flex items-center gap-4 p-4 rounded-xl transition-colors"
+                    style="background:var(--bg-input);" onmouseover="this.style.background='var(--bg-hover)'"
+                    onmouseout="this.style.background='var(--bg-input)'">
+                    <div class="w-10 h-10 rounded-full bg-purple-500 flex items-center justify-center"><span
+                            class="material-symbols-outlined text-white">link</span></div><span
+                        style="color:var(--text-primary);">Link Kopyala</span>
                 </button>
             </div>
         </div>
@@ -127,8 +176,10 @@
     <div id="reportSignModal" class="tp-modal-overlay">
         <div class="tp-modal max-w-lg">
             <h3 class="tp-modal-title mb-2">Uygunsuzluk Raporu İmzası</h3>
-            <p class="text-sm mb-4" style="color:var(--text-muted);">Raporu oluşturmadan önce lütfen karşı taraf imzasını alın.</p>
-            <div class="bg-white rounded-xl p-2 mb-4"><canvas id="reportSignCanvas" class="w-full h-48 cursor-crosshair touch-none"></canvas></div>
+            <p class="text-sm mb-4" style="color:var(--text-muted);">Raporu oluşturmadan önce lütfen karşı taraf
+                imzasını alın.</p>
+            <div class="bg-white rounded-xl p-2 mb-4"><canvas id="reportSignCanvas"
+                    class="w-full h-48 cursor-crosshair touch-none"></canvas></div>
             <div class="flex gap-3">
                 <button onclick="clearReportSign()" class="flex-1 tp-btn tp-btn-secondary">Temizle</button>
                 <button onclick="generateReportWithSign()" class="flex-1 tp-btn tp-btn-primary">Raporu Oluştur</button>
@@ -140,16 +191,18 @@
     <div id="reviewModal" class="tp-modal-overlay">
         <div class="tp-modal max-w-md">
             <h3 id="reviewModalTitle" class="tp-modal-title mb-4">Denetimi Onayla</h3>
-            <textarea id="reviewNote" placeholder="Not ekleyin (opsiyonel)..." class="tp-input tp-textarea" rows="3"></textarea>
+            <textarea id="reviewNote" placeholder="Not ekleyin (opsiyonel)..." class="tp-input tp-textarea"
+                rows="3"></textarea>
             <div class="flex gap-3 mt-4">
                 <button onclick="closeReviewModal()" class="flex-1 tp-btn tp-btn-secondary">İptal</button>
-                <button onclick="confirmReview()" id="confirmReviewBtn" class="flex-1 tp-btn tp-btn-primary">Onayla</button>
+                <button onclick="confirmReview()" id="confirmReviewBtn"
+                    class="flex-1 tp-btn tp-btn-primary">Onayla</button>
             </div>
         </div>
     </div>
 
     <script>
-        const API_URL = 'http://localhost:8080';
+        const API_URL = '/api';
         const token = localStorage.getItem('token');
         const user = JSON.parse(localStorage.getItem('user') || '{}');
         const userRole = typeof user.role === 'object' ? user.role.name : user.role;
@@ -205,13 +258,13 @@
                         <span class="text-sm" style="color:var(--text-muted);">${getCategoryScore(cat.id)}</span>
                     </div>
                     <div>${cat.questions.map(q => {
-                        const a = answerMap.get(q.id);
-                        return `<div class="p-4 flex items-start gap-4" style="border-bottom:1px solid var(--border-color);">
+                const a = answerMap.get(q.id);
+                return `<div class="p-4 flex items-start gap-4" style="border-bottom:1px solid var(--border-color);">
                             <span class="tp-answer-${a?.value || 'DD'} px-2 py-1 rounded text-xs font-medium">${getAnswerLabel(a?.value || 'DD')}</span>
                             <div class="flex-1"><p style="color:var(--text-primary);">${q.text}</p>${a?.note ? `<p class="text-sm mt-1" style="color:var(--text-muted);">${a.note}</p>` : ''}</div>
                             <span class="text-sm" style="color:var(--text-muted);">${q.points}p</span>
                         </div>`;
-                    }).join('')}</div>
+            }).join('')}</div>
                 </div>
             `).join('');
         }
@@ -269,7 +322,7 @@
             document.getElementById('reviewModalTitle').textContent = action === 'approve' ? 'Denetimi Onayla' : 'Denetimi Reddet';
             const btn = document.getElementById('confirmReviewBtn');
             btn.textContent = action === 'approve' ? 'Onayla' : 'Reddet';
-            btn.className = action === 'approve' ? 'flex-1 tp-btn tp-btn-primary' : 'flex-1 tp-btn' ;
+            btn.className = action === 'approve' ? 'flex-1 tp-btn tp-btn-primary' : 'flex-1 tp-btn';
             if (action !== 'approve') { btn.style.background = '#ef4444'; btn.style.color = '#fff'; }
             document.getElementById('reviewModal').classList.add('active');
         }
@@ -319,17 +372,19 @@
             if (answers.length === 0) { doc.setFontSize(14); doc.setTextColor(16, 185, 129); doc.text('Uygunsuzluk bulunmamaktadir!', pw / 2, 100, { align: 'center' }); }
             else {
                 const tb = []; let cc = '';
-                answers.forEach(a => { const cn = ct(a.question?.category?.title || '-'); if (cn !== cc) { tb.push([{ content: cn, colSpan: 3, styles: { fillColor: [241, 245, 249], fontStyle: 'bold', textColor: [51, 65, 85] } }]); cc = cn; }
-                    tb.push([ct(a.question?.text || '') + (a.note ? '\nNot: ' + ct(a.note) : ''), { U: 'UYGUN', YP: 'YARIM', UD: 'UYGUN DEGIL', DD: 'KAPSAM DISI' }[a.value] || a.value, a.question?.points + 'p']); });
+                answers.forEach(a => {
+                    const cn = ct(a.question?.category?.title || '-'); if (cn !== cc) { tb.push([{ content: cn, colSpan: 3, styles: { fillColor: [241, 245, 249], fontStyle: 'bold', textColor: [51, 65, 85] } }]); cc = cn; }
+                    tb.push([ct(a.question?.text || '') + (a.note ? '\nNot: ' + ct(a.note) : ''), { U: 'UYGUN', YP: 'YARIM', UD: 'UYGUN DEGIL', DD: 'KAPSAM DISI' }[a.value] || a.value, a.question?.points + 'p']);
+                });
                 doc.autoTable({ startY: doc.lastAutoTable.finalY + 10, margin: { left: m, right: m }, head: [['Soru / Detay', 'Durum', 'Puan']], body: tb, theme: 'grid', headStyles: { fillColor: [16, 34, 22], textColor: [255, 255, 255] }, styles: { fontSize: 9, cellPadding: 4, valign: 'middle' }, columnStyles: { 0: { cellWidth: 'auto' }, 1: { cellWidth: 30, halign: 'center', fontStyle: 'bold' }, 2: { cellWidth: 15, halign: 'center' } }, didParseCell: function (d) { if (d.section === 'body' && d.column.index === 1) { const v = d.cell.raw; if (v === 'UYGUN') d.cell.styles.textColor = [22, 163, 74]; if (v === 'UYGUN DEGIL') d.cell.styles.textColor = [220, 38, 38]; if (v === 'YARIM') d.cell.styles.textColor = [202, 138, 4]; } } });
             }
             let fy = doc.lastAutoTable ? doc.lastAutoTable.finalY + 20 : 120;
             if (fy > 250) { doc.addPage(); fy = 40; }
             doc.setDrawColor(209, 213, 219); doc.line(m, fy, pw - m, fy);
             doc.setFontSize(10); doc.setTextColor(107, 114, 128); doc.text('Denetci Imzasi', m, fy + 10); doc.text('Karsi Taraf Imzasi', pw / 2 + 20, fy + 10);
-            if (audit.auditorSignatureUrl) { try { const img = new Image(); img.src = API_URL + audit.auditorSignatureUrl; doc.addImage(img, 'PNG', m, fy + 15, 40, 20); } catch (e) {} }
+            if (audit.auditorSignatureUrl) { try { const img = new Image(); img.src = API_URL + audit.auditorSignatureUrl; doc.addImage(img, 'PNG', m, fy + 15, 40, 20); } catch (e) { } }
             if (extraSignature) doc.addImage(extraSignature, 'PNG', pw / 2 + 20, fy + 15, 40, 20);
-            else if (audit.clientSignatureUrl) { try { const img = new Image(); img.src = API_URL + audit.clientSignatureUrl; doc.addImage(img, 'PNG', pw / 2 + 20, fy + 15, 40, 20); } catch (e) {} }
+            else if (audit.clientSignatureUrl) { try { const img = new Image(); img.src = API_URL + audit.clientSignatureUrl; doc.addImage(img, 'PNG', pw / 2 + 20, fy + 15, 40, 20); } catch (e) { } }
             const pc = doc.internal.getNumberOfPages();
             for (let i = 1; i <= pc; i++) { doc.setPage(i); doc.setFontSize(8); doc.setTextColor(156, 163, 175); doc.text(`Sayfa ${i} / ${pc} - Olusturulma: ${new Date().toLocaleString('tr-TR')}`, pw / 2, 290, { align: 'center' }); }
             doc.save(type === 'nonconformity' ? `denetim-${auditId}-uygunsuzluk.pdf` : `denetim-${auditId}-genel.pdf`);
