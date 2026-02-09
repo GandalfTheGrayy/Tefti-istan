@@ -5,15 +5,15 @@ export default defineConfig({
     root: '.',
     publicDir: 'public',
     server: {
-        port: 5173,
+        port: 2525,
         proxy: {
             '/api': {
-                target: 'http://localhost:8080',
+                target: 'http://localhost:3636',
                 changeOrigin: true,
                 rewrite: (path) => path.replace(/^\/api/, '')
             },
             '/uploads': {
-                target: 'http://localhost:8080',
+                target: 'http://localhost:3636',
                 changeOrigin: true
             }
         }

@@ -1,0 +1,9 @@
+node_modules/
+.env
+dist/
+build/
+.vite/
+*.db
+Gemini_Generated_Image*
+teftispro/backend/node_modules/
+teftispro/frontend/node_modules/

@@ -20,7 +20,7 @@ const app = express();
 
 // JWT Secret
 const JWT_SECRET = process.env.JWT_SECRET || 'teftispro-super-secret-key-2024';
-const PORT = process.env.PORT || 8080;
+const PORT = process.env.PORT || 3636;
 
 // Uploads klasörü
 const uploadsDir = path.join(__dirname, '..', 'uploads');
