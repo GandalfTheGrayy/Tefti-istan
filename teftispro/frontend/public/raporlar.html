@@ -1,0 +1,552 @@
+<!DOCTYPE html>
+<html lang="tr">
+
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Raporlar - TeftişPro</title>
+    <link rel="preconnect" href="https://fonts.googleapis.com">
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700&display=swap" rel="stylesheet">
+    <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Material+Symbols+Outlined:opsz,wght,FILL,GRAD@24,400,0,0" />
+    <script src="https://cdn.tailwindcss.com"></script>
+    <script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.7/dist/chart.umd.min.js"></script>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/jspdf/2.5.1/jspdf.umd.min.js"></script>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/jspdf-autotable/3.8.2/jspdf.plugin.autotable.min.js"></script>
+    <link rel="stylesheet" href="/public/styles.css">
+    <script src="/public/layout.js"></script>
+</head>
+
+<body>
+    <main>
+        <div class="p-4 lg:p-8 tp-animate-in">
+            <!-- Header -->
+            <div class="flex items-center justify-between mb-6">
+                <div>
+                    <h2 class="text-2xl font-bold" style="color:var(--text-primary);">Raporlar & Analiz</h2>
+                    <p class="text-sm mt-1" style="color:var(--text-muted);">Denetim verilerini gorsellerle analiz edin</p>
+                </div>
+                <div class="flex gap-2">
+                    <button onclick="exportCSV()" class="tp-btn tp-btn-secondary">
+                        <span class="material-symbols-outlined">table_chart</span><span class="hidden sm:inline">CSV</span>
+                    </button>
+                    <button onclick="exportPDFReport()" class="tp-btn tp-btn-primary">
+                        <span class="material-symbols-outlined">picture_as_pdf</span><span class="hidden sm:inline">PDF Rapor</span>
+                    </button>
+                </div>
+            </div>
+
+            <!-- Date Presets + Filters -->
+            <div class="tp-card rounded-2xl p-5 mb-6">
+                <!-- Quick Date Presets -->
+                <div class="flex flex-wrap gap-2 mb-4">
+                    <button onclick="setDatePreset('week')" class="tp-date-preset" data-preset="week">Bu Hafta</button>
+                    <button onclick="setDatePreset('month')" class="tp-date-preset" data-preset="month">Bu Ay</button>
+                    <button onclick="setDatePreset('quarter')" class="tp-date-preset" data-preset="quarter">Son 3 Ay</button>
+                    <button onclick="setDatePreset('year')" class="tp-date-preset active" data-preset="year">Bu Yil</button>
+                    <button onclick="setDatePreset('all')" class="tp-date-preset" data-preset="all">Tumu</button>
+                </div>
+                <div class="grid grid-cols-1 md:grid-cols-4 gap-4">
+                    <div><label class="tp-label">Baslangic Tarihi</label><input type="date" id="startDate" class="tp-input"></div>
+                    <div><label class="tp-label">Bitis Tarihi</label><input type="date" id="endDate" class="tp-input"></div>
+                    <div><label class="tp-label">Sirket</label><select id="companyFilter" class="tp-input tp-select"><option value="">Tumu</option></select></div>
+                    <div><label class="tp-label">Durum</label><select id="statusFilter" class="tp-input tp-select"><option value="">Tumu</option><option value="pending">Atandi</option><option value="draft">Devam Ediyor</option><option value="submitted">Gonderildi</option><option value="approved">Onaylandi</option><option value="rejected">Reddedildi</option></select></div>
+                </div>
+                <button onclick="applyFilters()" class="mt-4 tp-btn tp-btn-primary">Filtrele</button>
+            </div>
+
+            <!-- Summary Cards -->
+            <div class="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4 mb-6">
+                <div class="tp-stat-card tp-stat-card-blue"><div class="flex items-center gap-3 mb-2"><div class="tp-stat-icon tp-icon-blue"><span class="material-symbols-outlined">assignment</span></div><span id="totalAudits" class="text-2xl font-bold" style="color:var(--text-primary);">0</span></div><p class="text-sm" style="color:var(--text-muted);">Toplam Denetim</p></div>
+                <div class="tp-stat-card tp-stat-card-green"><div class="flex items-center gap-3 mb-2"><div class="tp-stat-icon tp-icon-green"><span class="material-symbols-outlined">check_circle</span></div><span id="completedAudits" class="text-2xl font-bold" style="color:var(--text-primary);">0</span></div><p class="text-sm" style="color:var(--text-muted);">Tamamlanan</p></div>
+                <div class="tp-stat-card tp-stat-card-yellow"><div class="flex items-center gap-3 mb-2"><div class="tp-stat-icon tp-icon-yellow"><span class="material-symbols-outlined">trending_up</span></div><span id="avgScore" class="text-2xl font-bold" style="color:var(--text-primary);">0%</span></div><p class="text-sm" style="color:var(--text-muted);">Ortalama Puan</p></div>
+                <div class="tp-stat-card tp-stat-card-purple"><div class="flex items-center gap-3 mb-2"><div class="tp-stat-icon tp-icon-purple"><span class="material-symbols-outlined">speed</span></div><span id="completionRate" class="text-2xl font-bold" style="color:var(--text-primary);">0%</span></div><p class="text-sm" style="color:var(--text-muted);">Tamamlanma Orani</p></div>
+            </div>
+
+            <!-- Charts Row -->
+            <div class="grid grid-cols-1 lg:grid-cols-2 gap-6 mb-6">
+                <!-- Status Distribution Pie -->
+                <div class="tp-card rounded-2xl p-5">
+                    <h3 class="font-semibold mb-4" style="color:var(--text-primary);">Durum Dagilimi</h3>
+                    <div class="tp-chart-container" style="max-height:280px;"><canvas id="statusChart"></canvas></div>
+                </div>
+                <!-- Monthly Trend Line -->
+                <div class="tp-card rounded-2xl p-5">
+                    <h3 class="font-semibold mb-4" style="color:var(--text-primary);">Aylik Puan Trendi</h3>
+                    <div class="tp-chart-container" style="max-height:280px;"><canvas id="trendChart"></canvas></div>
+                </div>
+            </div>
+
+            <!-- Branch Comparison Bar Chart -->
+            <div class="tp-card rounded-2xl p-5 mb-6">
+                <h3 class="font-semibold mb-4" style="color:var(--text-primary);">Sube Karsilastirmasi</h3>
+                <div class="tp-chart-container" style="max-height:300px;"><canvas id="branchChart"></canvas></div>
+            </div>
+
+            <!-- Analysis Row -->
+            <div class="grid grid-cols-1 lg:grid-cols-3 gap-6 mb-6">
+                <!-- Top/Bottom Branches -->
+                <div class="tp-card rounded-2xl p-5">
+                    <h3 class="font-semibold mb-4" style="color:var(--text-primary);">En Basarili Subeler</h3>
+                    <div id="topBranches"></div>
+                    <div id="topBranchesEmpty" class="hidden text-center py-6" style="color:var(--text-muted);"><span class="material-symbols-outlined text-2xl">store</span><p class="text-sm mt-1">Veri yok</p></div>
+                </div>
+
+                <!-- Category Performance -->
+                <div class="tp-card rounded-2xl p-5">
+                    <h3 class="font-semibold mb-4" style="color:var(--text-primary);">Kategori Performansi</h3>
+                    <div id="categoryPerf"></div>
+                    <div id="categoryPerfEmpty" class="hidden text-center py-6" style="color:var(--text-muted);"><span class="material-symbols-outlined text-2xl">category</span><p class="text-sm mt-1">Veri yok</p></div>
+                </div>
+
+                <!-- Auditor Performance -->
+                <div class="tp-card rounded-2xl p-5">
+                    <h3 class="font-semibold mb-4" style="color:var(--text-primary);">Denetci Performansi</h3>
+                    <div id="auditorPerf"></div>
+                    <div id="auditorPerfEmpty" class="hidden text-center py-6" style="color:var(--text-muted);"><span class="material-symbols-outlined text-2xl">person</span><p class="text-sm mt-1">Veri yok</p></div>
+                </div>
+            </div>
+
+            <!-- Data Table -->
+            <div class="tp-card rounded-2xl overflow-hidden">
+                <div class="p-4 flex items-center justify-between" style="border-bottom:1px solid var(--border-color);">
+                    <h3 class="font-semibold" style="color:var(--text-primary);">Denetim Detaylari</h3>
+                    <span class="text-sm" style="color:var(--text-muted);" id="tableCount">0 kayit</span>
+                </div>
+                <div class="overflow-x-auto">
+                    <table class="tp-table tp-table-striped">
+                        <thead><tr><th>ID</th><th>Baslik</th><th>Sube</th><th>Denetci</th><th>Puan</th><th>Durum</th><th>Tarih</th><th></th></tr></thead>
+                        <tbody id="auditsTable"></tbody>
+                    </table>
+                </div>
+                <div id="emptyState" class="hidden tp-empty-state"><span class="material-symbols-outlined">inventory_2</span><p>Filtrelere uygun denetim bulunamadi</p></div>
+            </div>
+        </div>
+    </main>
+
+    <script>
+        const API_URL = 'http://localhost:8080';
+        const token = localStorage.getItem('token');
+        if (!token) window.location.href = '/public/login.html';
+        const _userRole = LAYOUT.getUserRole();
+        if (!['admin', 'planlamacı', 'gözden_geçiren', 'firma_sahibi'].includes(_userRole)) {
+            window.location.href = '/public/kontrol_paneli.html';
+        }
+
+        let allAudits = [], filteredAudits = [];
+        let statusChartInstance, trendChartInstance, branchChartInstance;
+
+        // Chart.js theme helper
+        function getChartColors() {
+            const isDark = LAYOUT.getTheme() === 'dark';
+            return {
+                text: isDark ? '#94a3b8' : '#64748b',
+                grid: isDark ? 'rgba(51,65,85,0.3)' : 'rgba(226,232,240,0.8)',
+                bg: isDark ? '#1e293b' : '#ffffff'
+            };
+        }
+
+        // ---- Data Loading ----
+        async function loadData() {
+            try {
+                const [auditsRes, companiesRes] = await Promise.all([
+                    fetch(`${API_URL}/audits`, { headers: { 'Authorization': `Bearer ${token}` } }),
+                    fetch(`${API_URL}/companies`, { headers: { 'Authorization': `Bearer ${token}` } })
+                ]);
+                if (auditsRes.ok) allAudits = await auditsRes.json();
+                if (companiesRes.ok) {
+                    const cs = await companiesRes.json();
+                    const s = document.getElementById('companyFilter');
+                    cs.forEach(c => s.innerHTML += `<option value="${c.id}">${c.name}</option>`);
+                }
+                setDatePreset('year');
+            } catch (e) { console.error(e); }
+        }
+
+        // ---- Date Presets ----
+        function setDatePreset(preset) {
+            document.querySelectorAll('.tp-date-preset').forEach(b => b.classList.toggle('active', b.dataset.preset === preset));
+            const now = new Date();
+            let start = '', end = '';
+
+            if (preset === 'week') {
+                const d = new Date(now); d.setDate(d.getDate() - d.getDay() + 1);
+                start = d.toISOString().split('T')[0];
+                end = now.toISOString().split('T')[0];
+            } else if (preset === 'month') {
+                start = `${now.getFullYear()}-${String(now.getMonth()+1).padStart(2,'0')}-01`;
+                end = now.toISOString().split('T')[0];
+            } else if (preset === 'quarter') {
+                const d = new Date(now); d.setMonth(d.getMonth() - 3);
+                start = d.toISOString().split('T')[0];
+                end = now.toISOString().split('T')[0];
+            } else if (preset === 'year') {
+                start = `${now.getFullYear()}-01-01`;
+                end = now.toISOString().split('T')[0];
+            }
+            // 'all' = empty dates
+
+            document.getElementById('startDate').value = start;
+            document.getElementById('endDate').value = end;
+            applyFilters();
+        }
+
+        // ---- Filters ----
+        function applyFilters() {
+            let f = [...allAudits];
+            const sd = document.getElementById('startDate').value, ed = document.getElementById('endDate').value;
+            const cid = document.getElementById('companyFilter').value, st = document.getElementById('statusFilter').value;
+            if (sd) f = f.filter(a => new Date(a.createdAt) >= new Date(sd));
+            if (ed) f = f.filter(a => new Date(a.createdAt) <= new Date(ed + 'T23:59:59'));
+            if (cid) f = f.filter(a => a.branch?.company?.id == cid || a.company?.id == cid);
+            if (st) f = f.filter(a => a.status === st);
+            filteredAudits = f;
+            updateAll();
+        }
+
+        function updateAll() {
+            updateSummary();
+            renderStatusChart();
+            renderTrendChart();
+            renderBranchChart();
+            renderTopBranches();
+            renderCategoryPerf();
+            renderAuditorPerf();
+            renderTable();
+        }
+
+        // ---- Summary ----
+        function updateSummary() {
+            const a = filteredAudits;
+            document.getElementById('totalAudits').textContent = a.length;
+            const c = a.filter(x => x.status === 'approved').length;
+            document.getElementById('completedAudits').textContent = c;
+            document.getElementById('avgScore').textContent = (a.length > 0 ? Math.round(a.reduce((s, x) => s + (x.score?.percent || 0), 0) / a.length) : 0) + '%';
+            document.getElementById('completionRate').textContent = (a.length > 0 ? Math.round((c / a.length) * 100) : 0) + '%';
+        }
+
+        // ---- Status Pie Chart ----
+        function renderStatusChart() {
+            const counts = {};
+            const labels = { pending: 'Atandi', draft: 'Devam Ediyor', submitted: 'Gonderildi', approved: 'Onaylandi', rejected: 'Reddedildi', revision_requested: 'Revizyon' };
+            const colors = { pending: '#8b5cf6', draft: '#6b7280', submitted: '#3b82f6', approved: '#10b981', rejected: '#ef4444', revision_requested: '#f59e0b' };
+
+            filteredAudits.forEach(a => { counts[a.status] = (counts[a.status] || 0) + 1; });
+
+            const statusKeys = Object.keys(counts);
+
+            if (statusChartInstance) statusChartInstance.destroy();
+            const cc = getChartColors();
+            statusChartInstance = new Chart(document.getElementById('statusChart'), {
+                type: 'doughnut',
+                data: {
+                    labels: statusKeys.map(k => labels[k] || k),
+                    datasets: [{
+                        data: statusKeys.map(k => counts[k]),
+                        backgroundColor: statusKeys.map(k => colors[k] || '#6b7280'),
+                        borderWidth: 0,
+                        hoverOffset: 6
+                    }]
+                },
+                options: {
+                    responsive: true, maintainAspectRatio: false,
+                    plugins: {
+                        legend: { position: 'bottom', labels: { color: cc.text, padding: 12, usePointStyle: true, pointStyleWidth: 8, font: { size: 11 } } }
+                    },
+                    cutout: '65%'
+                }
+            });
+        }
+
+        // ---- Monthly Trend Line Chart ----
+        function renderTrendChart() {
+            const monthNames = ['Oca', 'Sub', 'Mar', 'Nis', 'May', 'Haz', 'Tem', 'Agu', 'Eyl', 'Eki', 'Kas', 'Ara'];
+            const monthData = Array(12).fill(null).map(() => ({ total: 0, score: 0 }));
+
+            filteredAudits.forEach(a => {
+                const m = new Date(a.createdAt).getMonth();
+                monthData[m].total++;
+                monthData[m].score += a.score?.percent || 0;
+            });
+
+            const avgScores = monthData.map(d => d.total > 0 ? Math.round(d.score / d.total) : 0);
+            const auditCounts = monthData.map(d => d.total);
+
+            if (trendChartInstance) trendChartInstance.destroy();
+            const cc = getChartColors();
+            const accent = getComputedStyle(document.documentElement).getPropertyValue('--color-accent').trim() || '#10b981';
+
+            trendChartInstance = new Chart(document.getElementById('trendChart'), {
+                type: 'line',
+                data: {
+                    labels: monthNames,
+                    datasets: [
+                        {
+                            label: 'Ort. Puan (%)',
+                            data: avgScores,
+                            borderColor: accent,
+                            backgroundColor: accent + '20',
+                            fill: true,
+                            tension: 0.4,
+                            pointRadius: 3,
+                            pointBackgroundColor: accent
+                        },
+                        {
+                            label: 'Denetim Sayisi',
+                            data: auditCounts,
+                            borderColor: '#3b82f6',
+                            backgroundColor: 'transparent',
+                            borderDash: [5, 5],
+                            tension: 0.4,
+                            pointRadius: 2,
+                            yAxisID: 'y1'
+                        }
+                    ]
+                },
+                options: {
+                    responsive: true, maintainAspectRatio: false,
+                    plugins: { legend: { labels: { color: cc.text, usePointStyle: true, font: { size: 11 } } } },
+                    scales: {
+                        x: { ticks: { color: cc.text }, grid: { color: cc.grid } },
+                        y: { beginAtZero: true, max: 100, ticks: { color: cc.text, callback: v => v + '%' }, grid: { color: cc.grid } },
+                        y1: { position: 'right', beginAtZero: true, ticks: { color: cc.text }, grid: { display: false } }
+                    }
+                }
+            });
+        }
+
+        // ---- Branch Comparison Bar Chart ----
+        function renderBranchChart() {
+            const branchScores = {};
+            filteredAudits.forEach(a => {
+                const name = a.branch?.name || 'Bilinmiyor';
+                if (!branchScores[name]) branchScores[name] = { total: 0, score: 0 };
+                branchScores[name].total++;
+                branchScores[name].score += a.score?.percent || 0;
+            });
+
+            const entries = Object.entries(branchScores).map(([name, d]) => ({ name, avg: Math.round(d.score / d.total), count: d.total })).sort((a, b) => b.avg - a.avg).slice(0, 10);
+
+            if (branchChartInstance) branchChartInstance.destroy();
+            const cc = getChartColors();
+            const accent = getComputedStyle(document.documentElement).getPropertyValue('--color-accent').trim() || '#10b981';
+
+            branchChartInstance = new Chart(document.getElementById('branchChart'), {
+                type: 'bar',
+                data: {
+                    labels: entries.map(e => e.name),
+                    datasets: [{
+                        label: 'Ortalama Puan (%)',
+                        data: entries.map(e => e.avg),
+                        backgroundColor: entries.map((_, i) => i === 0 ? accent : accent + '80'),
+                        borderRadius: 6,
+                        maxBarThickness: 40
+                    }]
+                },
+                options: {
+                    responsive: true, maintainAspectRatio: false, indexAxis: 'y',
+                    plugins: { legend: { display: false } },
+                    scales: {
+                        x: { beginAtZero: true, max: 100, ticks: { color: cc.text, callback: v => v + '%' }, grid: { color: cc.grid } },
+                        y: { ticks: { color: cc.text }, grid: { display: false } }
+                    }
+                }
+            });
+        }
+
+        // ---- Top Branches ----
+        function renderTopBranches() {
+            const branchScores = {};
+            filteredAudits.forEach(a => {
+                const name = a.branch?.name;
+                if (!name) return;
+                if (!branchScores[name]) branchScores[name] = { total: 0, score: 0 };
+                branchScores[name].total++;
+                branchScores[name].score += a.score?.percent || 0;
+            });
+
+            const entries = Object.entries(branchScores).map(([name, d]) => ({ name, avg: Math.round(d.score / d.total) })).sort((a, b) => b.avg - a.avg).slice(0, 5);
+            const container = document.getElementById('topBranches');
+            const empty = document.getElementById('topBranchesEmpty');
+
+            if (entries.length === 0) { container.innerHTML = ''; empty.classList.remove('hidden'); return; }
+            empty.classList.add('hidden');
+
+            const rankClasses = ['gold', 'silver', 'bronze', '', ''];
+            container.innerHTML = entries.map((e, i) => `
+                <div class="tp-perf-item">
+                    <div class="tp-perf-rank ${rankClasses[i]}">${i + 1}</div>
+                    <div class="flex-1">
+                        <p class="text-sm font-medium" style="color:var(--text-primary);">${e.name}</p>
+                        <div class="tp-perf-bar mt-1"><div class="tp-perf-bar-fill" style="width:${e.avg}%"></div></div>
+                    </div>
+                    <span class="text-sm font-bold" style="color:var(--color-accent);">${e.avg}%</span>
+                </div>
+            `).join('');
+        }
+
+        // ---- Category Performance ----
+        function renderCategoryPerf() {
+            const catScores = {};
+            filteredAudits.forEach(a => {
+                if (!a.score?.byCategory) return;
+                a.score.byCategory.forEach(c => {
+                    if (!catScores[c.title]) catScores[c.title] = { total: 0, score: 0 };
+                    catScores[c.title].total++;
+                    catScores[c.title].score += c.percent;
+                });
+            });
+
+            const entries = Object.entries(catScores).map(([name, d]) => ({ name, avg: Math.round(d.score / d.total) })).sort((a, b) => b.avg - a.avg);
+            const container = document.getElementById('categoryPerf');
+            const empty = document.getElementById('categoryPerfEmpty');
+
+            if (entries.length === 0) { container.innerHTML = ''; empty.classList.remove('hidden'); return; }
+            empty.classList.add('hidden');
+
+            container.innerHTML = entries.map(e => `
+                <div class="tp-perf-item">
+                    <span class="material-symbols-outlined text-[18px]" style="color:var(--text-muted);">folder</span>
+                    <div class="flex-1">
+                        <p class="text-sm font-medium" style="color:var(--text-primary);">${e.name}</p>
+                        <div class="tp-perf-bar mt-1"><div class="tp-perf-bar-fill" style="width:${e.avg}%;background:${e.avg >= 80 ? '#10b981' : e.avg >= 60 ? '#f59e0b' : '#ef4444'}"></div></div>
+                    </div>
+                    <span class="text-sm font-bold ${e.avg >= 80 ? 'tp-score-high' : e.avg >= 60 ? 'tp-score-mid' : 'tp-score-low'}">${e.avg}%</span>
+                </div>
+            `).join('');
+        }
+
+        // ---- Auditor Performance ----
+        function renderAuditorPerf() {
+            const auditorScores = {};
+            filteredAudits.forEach(a => {
+                const name = a.user?.email?.split('@')[0];
+                if (!name) return;
+                if (!auditorScores[name]) auditorScores[name] = { total: 0, score: 0, completed: 0 };
+                auditorScores[name].total++;
+                auditorScores[name].score += a.score?.percent || 0;
+                if (a.status === 'approved') auditorScores[name].completed++;
+            });
+
+            const entries = Object.entries(auditorScores).map(([name, d]) => ({ name, avg: Math.round(d.score / d.total), total: d.total, completed: d.completed })).sort((a, b) => b.avg - a.avg).slice(0, 5);
+            const container = document.getElementById('auditorPerf');
+            const empty = document.getElementById('auditorPerfEmpty');
+
+            if (entries.length === 0) { container.innerHTML = ''; empty.classList.remove('hidden'); return; }
+            empty.classList.add('hidden');
+
+            container.innerHTML = entries.map(e => `
+                <div class="tp-perf-item">
+                    <div class="w-8 h-8 rounded-full flex items-center justify-center text-xs font-bold" style="background:var(--color-accent-100);color:var(--color-accent-700);">${e.name.substring(0, 2).toUpperCase()}</div>
+                    <div class="flex-1">
+                        <p class="text-sm font-medium" style="color:var(--text-primary);">${e.name}</p>
+                        <p class="text-xs" style="color:var(--text-muted);">${e.completed}/${e.total} tamamlandi</p>
+                    </div>
+                    <span class="text-sm font-bold" style="color:var(--color-accent);">${e.avg}%</span>
+                </div>
+            `).join('');
+        }
+
+        // ---- Table ----
+        function renderTable() {
+            const tbody = document.getElementById('auditsTable'), empty = document.getElementById('emptyState');
+            document.getElementById('tableCount').textContent = filteredAudits.length + ' kayit';
+            if (filteredAudits.length === 0) { tbody.innerHTML = ''; empty.classList.remove('hidden'); return; }
+            empty.classList.add('hidden');
+            tbody.innerHTML = filteredAudits.map(a => `
+                <tr>
+                    <td style="color:var(--text-muted);">#${a.id}</td>
+                    <td class="font-medium" style="color:var(--text-primary);">${a.title || 'Denetim #' + a.id}</td>
+                    <td>${a.branch?.name || '-'}</td>
+                    <td>${a.user?.email?.split('@')[0] || '-'}</td>
+                    <td><div class="flex items-center gap-2"><div class="tp-progress-bar"><div class="tp-progress-bar-fill" style="width:${a.score?.percent || 0}%"></div></div><span class="text-sm ${getScoreColor(a.score?.percent || 0)}">${a.score?.percent || 0}%</span></div></td>
+                    <td><span class="tp-badge tp-badge-${a.status}">${getStatusName(a.status)}</span></td>
+                    <td class="text-sm">${formatDate(a.createdAt)}</td>
+                    <td><a href="/public/denetim_inceleme.html?id=${a.id}" class="tp-btn-ghost" style="color:var(--color-accent);"><span class="material-symbols-outlined">visibility</span></a></td>
+                </tr>
+            `).join('');
+        }
+
+        // ---- CSV Export ----
+        function exportCSV() {
+            const h = ['ID', 'Baslik', 'Sube', 'Sirket', 'Denetci', 'Puan', 'Durum', 'Tarih'];
+            const r = filteredAudits.map(a => [a.id, a.title || 'Denetim #' + a.id, a.branch?.name || '', a.branch?.company?.name || '', a.user?.email || '', (a.score?.percent || 0) + '%', getStatusName(a.status), formatDate(a.createdAt)]);
+            const csv = [h, ...r].map(row => row.map(c => `"${c}"`).join(',')).join('\n');
+            const blob = new Blob(['\uFEFF' + csv], { type: 'text/csv;charset=utf-8' });
+            const link = document.createElement('a'); link.href = URL.createObjectURL(blob); link.download = `teftispro_rapor_${new Date().toISOString().split('T')[0]}.csv`; link.click();
+        }
+
+        // ---- PDF Export ----
+        function exportPDFReport() {
+            const { jsPDF } = window.jspdf;
+            const doc = new jsPDF('p', 'mm', 'a4');
+            const pw = 210, m = 15;
+            const ct = (t) => !t ? '' : t.replace(/[ıİğĞüÜşŞöÖçÇ]/g, c => ({ 'ı':'i','İ':'I','ğ':'g','Ğ':'G','ü':'u','Ü':'U','ş':'s','Ş':'S','ö':'o','Ö':'O','ç':'c','Ç':'C' })[c] || c);
+
+            // Header
+            doc.setFillColor(15, 23, 42);
+            doc.rect(0, 0, pw, 35, 'F');
+            doc.setFontSize(20); doc.setTextColor(255, 255, 255);
+            doc.text('TeftisPro - Rapor Ozeti', m, 22);
+            doc.setFontSize(10); doc.setTextColor(148, 163, 184);
+            doc.text(new Date().toLocaleDateString('tr-TR', { day:'numeric', month:'long', year:'numeric' }), pw - m, 22, { align: 'right' });
+
+            // Summary
+            const a = filteredAudits;
+            const completed = a.filter(x => x.status === 'approved').length;
+            const avg = a.length > 0 ? Math.round(a.reduce((s, x) => s + (x.score?.percent || 0), 0) / a.length) : 0;
+            const rate = a.length > 0 ? Math.round((completed / a.length) * 100) : 0;
+
+            doc.autoTable({
+                startY: 42, margin: { left: m, right: m },
+                head: [['Toplam Denetim', 'Tamamlanan', 'Ort. Puan', 'Tamamlanma Orani']],
+                body: [[a.length, completed, avg + '%', rate + '%']],
+                theme: 'grid',
+                headStyles: { fillColor: [16, 185, 129], textColor: [255, 255, 255], fontSize: 9 },
+                styles: { fontSize: 11, cellPadding: 4, halign: 'center', fontStyle: 'bold' }
+            });
+
+            // Audit table
+            if (a.length > 0) {
+                const tbody = a.slice(0, 30).map(x => [
+                    '#' + x.id,
+                    ct(x.title || 'Denetim #' + x.id),
+                    ct(x.branch?.name || '-'),
+                    ct(x.user?.email?.split('@')[0] || '-'),
+                    (x.score?.percent || 0) + '%',
+                    ct(getStatusName(x.status)),
+                    formatDate(x.createdAt)
+                ]);
+
+                doc.autoTable({
+                    startY: doc.lastAutoTable.finalY + 10,
+                    margin: { left: m, right: m },
+                    head: [['ID', 'Baslik', 'Sube', 'Denetci', 'Puan', 'Durum', 'Tarih']],
+                    body: tbody,
+                    theme: 'striped',
+                    headStyles: { fillColor: [30, 41, 59], textColor: [255, 255, 255], fontSize: 8 },
+                    styles: { fontSize: 8, cellPadding: 3 },
+                    columnStyles: { 4: { halign: 'center' }, 5: { halign: 'center' } }
+                });
+            }
+
+            // Footer
+            const pc = doc.internal.getNumberOfPages();
+            for (let i = 1; i <= pc; i++) {
+                doc.setPage(i); doc.setFontSize(8); doc.setTextColor(156, 163, 175);
+                doc.text(`TeftisPro Rapor - Sayfa ${i}/${pc}`, pw / 2, 290, { align: 'center' });
+            }
+
+            doc.save(`teftispro_rapor_${new Date().toISOString().split('T')[0]}.pdf`);
+        }
+
+        // ---- Helpers ----
+        function getStatusName(s) { return { 'pending': 'Atandi', 'draft': 'Devam Ediyor', 'submitted': 'Gonderildi', 'approved': 'Onaylandi', 'rejected': 'Reddedildi', 'revision_requested': 'Revizyon' }[s] || s; }
+        function getScoreColor(p) { return p >= 80 ? 'tp-score-high' : p >= 60 ? 'tp-score-mid' : 'tp-score-low'; }
+        function formatDate(d) { return new Date(d).toLocaleDateString('tr-TR', { day: '2-digit', month: '2-digit', year: 'numeric' }); }
+
+        loadData();
+    </script>
+</body>
+
+</html>

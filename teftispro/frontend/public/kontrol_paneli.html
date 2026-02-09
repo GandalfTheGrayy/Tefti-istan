@@ -1,0 +1,397 @@
+<!DOCTYPE html>
+<html lang="tr">
+
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Kontrol Paneli - TeftişPro</title>
+    <meta name="description" content="TeftişPro Dashboard - Denetimlerinizi yönetin">
+    <link rel="preconnect" href="https://fonts.googleapis.com">
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700&display=swap" rel="stylesheet">
+    <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Material+Symbols+Outlined:opsz,wght,FILL,GRAD@24,400,0,0" />
+    <script src="https://cdn.tailwindcss.com"></script>
+    <link rel="stylesheet" href="/public/styles.css">
+    <script src="/public/layout.js"></script>
+</head>
+
+<body>
+    <!-- Main Content -->
+    <main>
+        <!-- Dashboard Content -->
+        <div class="p-4 lg:p-8 tp-animate-in">
+            <!-- Welcome -->
+            <div class="mb-8 flex items-center justify-between">
+                <div>
+                    <h2 class="text-2xl font-bold" style="color:var(--text-primary);" id="greetingText">Hoş Geldiniz!</h2>
+                    <p class="mt-1" style="color:var(--text-muted);" id="dateText">Bugünkü denetim özetiniz aşağıda.</p>
+                </div>
+                <div class="hidden sm:flex items-center gap-2 px-4 py-2 rounded-xl" style="background:var(--bg-card);border:1px solid var(--border-color);">
+                    <span class="material-symbols-outlined text-[18px]" style="color:var(--text-muted);">calendar_today</span>
+                    <span class="text-sm font-medium" style="color:var(--text-secondary);" id="todayDate"></span>
+                </div>
+            </div>
+
+            <!-- Stats Cards -->
+            <div class="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4 mb-8">
+                <div class="tp-stat-card tp-stat-card-blue">
+                    <div class="flex items-center justify-between mb-3">
+                        <div class="tp-stat-icon tp-icon-blue">
+                            <span class="material-symbols-outlined">assignment</span>
+                        </div>
+                        <span id="statTotal" class="text-3xl font-bold" style="color:var(--text-primary);">0</span>
+                    </div>
+                    <p class="text-sm" style="color:var(--text-muted);">Toplam Denetim</p>
+                </div>
+
+                <div class="tp-stat-card tp-stat-card-yellow">
+                    <div class="flex items-center justify-between mb-3">
+                        <div class="tp-stat-icon tp-icon-yellow">
+                            <span class="material-symbols-outlined">pending</span>
+                        </div>
+                        <span id="statPending" class="text-3xl font-bold" style="color:var(--text-primary);">0</span>
+                    </div>
+                    <p class="text-sm" style="color:var(--text-muted);">Bekleyen Görevler</p>
+                </div>
+
+                <div class="tp-stat-card tp-stat-card-green">
+                    <div class="flex items-center justify-between mb-3">
+                        <div class="tp-stat-icon tp-icon-green">
+                            <span class="material-symbols-outlined">check_circle</span>
+                        </div>
+                        <span id="statCompleted" class="text-3xl font-bold" style="color:var(--text-primary);">0</span>
+                    </div>
+                    <p class="text-sm" style="color:var(--text-muted);">Tamamlanan</p>
+                </div>
+
+                <div class="tp-stat-card tp-stat-card-purple">
+                    <div class="flex items-center justify-between mb-3">
+                        <div class="tp-stat-icon tp-icon-purple">
+                            <span class="material-symbols-outlined">speed</span>
+                        </div>
+                        <span id="statRate" class="text-3xl font-bold" style="color:var(--text-primary);">0%</span>
+                    </div>
+                    <p class="text-sm" style="color:var(--text-muted);">Tamamlanma Oranı</p>
+                </div>
+            </div>
+
+            <!-- Chart Section -->
+            <div class="tp-card rounded-2xl p-6 mb-8">
+                <div class="flex items-center justify-between mb-6">
+                    <h3 class="text-lg font-semibold" style="color:var(--text-primary);">Yıllık Denetim Puanları</h3>
+                    <select class="tp-input tp-select" style="width:auto;padding:0.375rem 2rem 0.375rem 0.75rem;">
+                        <option>2026</option>
+                        <option>2025</option>
+                    </select>
+                </div>
+                <div id="chartContainer" class="h-64 flex items-end justify-between gap-2 px-4">
+                </div>
+                <div class="flex justify-between mt-4 text-xs px-4" style="color:var(--text-muted);">
+                    <span>Oca</span><span>Şub</span><span>Mar</span><span>Nis</span><span>May</span><span>Haz</span>
+                    <span>Tem</span><span>Ağu</span><span>Eyl</span><span>Eki</span><span>Kas</span><span>Ara</span>
+                </div>
+            </div>
+
+            <!-- Recent Audits -->
+            <div class="tp-card rounded-2xl overflow-hidden">
+                <div class="flex items-center justify-between p-6" style="border-bottom:1px solid var(--border-color);">
+                    <h3 class="text-lg font-semibold" style="color:var(--text-primary);">Son Denetimler</h3>
+                    <div class="flex items-center gap-3">
+                        <a href="/public/denetim_listesi.html" class="text-sm font-medium" style="color:var(--color-accent);">Tümünü Gör</a>
+                        <button id="newAuditBtn" onclick="createNewAudit()" class="hidden tp-btn tp-btn-primary">
+                            <span class="material-symbols-outlined text-lg">add</span>
+                            <span class="hidden sm:inline">Yeni Denetim</span>
+                        </button>
+                    </div>
+                </div>
+
+                <div class="overflow-x-auto">
+                    <table class="tp-table">
+                        <thead>
+                            <tr>
+                                <th>ID</th>
+                                <th>Başlık</th>
+                                <th>Durum</th>
+                                <th>Sorumlu</th>
+                                <th>Puan</th>
+                                <th>Tarih</th>
+                                <th></th>
+                            </tr>
+                        </thead>
+                        <tbody id="auditsTableBody"></tbody>
+                    </table>
+                </div>
+
+                <!-- Empty State -->
+                <div id="emptyState" class="hidden tp-empty-state">
+                    <span class="material-symbols-outlined">inventory_2</span>
+                    <p>Henüz denetim bulunmuyor</p>
+                    <button onclick="createNewAudit()" id="emptyNewAuditBtn" class="hidden tp-btn tp-btn-primary mt-4">
+                        İlk Denetimi Oluştur
+                    </button>
+                </div>
+            </div>
+        </div>
+
+        <!-- Yeni Denetim Modal -->
+        <div id="newAuditModal" class="tp-modal-overlay">
+            <div class="tp-modal max-w-lg">
+                <div class="tp-modal-header">
+                    <h3 class="tp-modal-title">Yeni Denetim Ata</h3>
+                    <button onclick="closeNewAuditModal()" class="tp-btn-ghost">
+                        <span class="material-symbols-outlined">close</span>
+                    </button>
+                </div>
+                <form id="newAuditForm" class="space-y-4">
+                    <div>
+                        <label class="tp-label">Denetçi (Saha Personeli) *</label>
+                        <select id="auditUserId" required class="tp-input tp-select">
+                            <option value="">Seçin...</option>
+                        </select>
+                    </div>
+                    <div>
+                        <label class="tp-label">Şube *</label>
+                        <select id="auditBranchId" required class="tp-input tp-select">
+                            <option value="">Seçin...</option>
+                        </select>
+                    </div>
+                    <div>
+                        <label class="tp-label">Planlanan Tarih</label>
+                        <input type="date" id="auditScheduledDate" class="tp-input">
+                    </div>
+                    <div>
+                        <label class="tp-label">Başlık (Opsiyonel)</label>
+                        <input type="text" id="auditTitle" placeholder="Aylık denetim" class="tp-input">
+                    </div>
+                    <button type="submit" class="w-full tp-btn tp-btn-primary py-3">Denetim Ata</button>
+                </form>
+            </div>
+        </div>
+    </main>
+
+    <script>
+        const API_URL = 'http://localhost:8080';
+        let currentUser = null;
+        let currentUserRole = '';
+
+        const token = localStorage.getItem('token');
+        if (!token) window.location.href = '/public/login.html';
+
+        async function loadUserInfo() {
+            try {
+                const response = await fetch(`${API_URL}/auth/me`, {
+                    headers: { 'Authorization': `Bearer ${token}` }
+                });
+                if (!response.ok) throw new Error('Oturum süresi doldu');
+
+                currentUser = await response.json();
+                currentUserRole = typeof currentUser.role === 'object' ? currentUser.role.name : currentUser.role;
+
+                if (['admin', 'planlamacı'].includes(currentUserRole)) {
+                    document.getElementById('newAuditBtn').classList.remove('hidden');
+                    document.getElementById('emptyNewAuditBtn').classList.remove('hidden');
+                }
+            } catch (error) {
+                console.error('User info error:', error);
+                logout();
+            }
+        }
+
+        function getRoleDisplayName(role) {
+            const names = { 'admin': 'Yönetici', 'planlamacı': 'Planlamacı', 'field': 'Saha Denetçisi', 'gözden_geçiren': 'Gözden Geçiren', 'firma_sahibi': 'Firma Sahibi', 'sube_kullanici': 'Şube Kullanıcı' };
+            return names[role] || role;
+        }
+
+        async function loadStats() {
+            try {
+                const response = await fetch(`${API_URL}/stats/overview`, {
+                    headers: { 'Authorization': `Bearer ${token}` }
+                });
+                if (response.ok) {
+                    const stats = await response.json();
+                    document.getElementById('statTotal').textContent = stats.total;
+                    document.getElementById('statPending').textContent = stats.draft + stats.submitted;
+                    document.getElementById('statCompleted').textContent = stats.approved;
+                    document.getElementById('statRate').textContent = stats.completionRate + '%';
+                }
+            } catch (error) { console.error('Stats error:', error); }
+        }
+
+        async function loadAnnualChart() {
+            try {
+                const response = await fetch(`${API_URL}/stats/annual`, {
+                    headers: { 'Authorization': `Bearer ${token}` }
+                });
+                if (response.ok) {
+                    renderChart(await response.json());
+                    return;
+                }
+            } catch (error) { console.error('Annual stats error:', error); }
+            renderChart(Array(12).fill({ averageScore: 0, auditCount: 0 }));
+        }
+
+        function renderChart(data) {
+            const container = document.getElementById('chartContainer');
+            container.innerHTML = '';
+            data.forEach((month) => {
+                const height = Math.max(month.averageScore, 5);
+                const bar = document.createElement('div');
+                bar.className = 'flex-1 rounded-t-lg transition-all duration-300 hover:opacity-80 cursor-pointer relative group';
+                bar.style.height = `${height}%`;
+                bar.style.background = 'linear-gradient(180deg, var(--color-accent) 0%, var(--color-accent-dark) 100%)';
+                bar.style.minHeight = '8px';
+                bar.innerHTML = `
+                    <div class="absolute bottom-full left-1/2 -translate-x-1/2 mb-2 px-2 py-1 rounded text-xs opacity-0 group-hover:opacity-100 transition-opacity whitespace-nowrap"
+                         style="background:var(--bg-card);color:var(--text-primary);border:1px solid var(--border-color);box-shadow:var(--shadow-md);">
+                        ${month.averageScore}% (${month.auditCount} denetim)
+                    </div>
+                `;
+                container.appendChild(bar);
+            });
+        }
+
+        async function loadAudits() {
+            try {
+                const response = await fetch(`${API_URL}/audits`, {
+                    headers: { 'Authorization': `Bearer ${token}` }
+                });
+                if (response.ok) {
+                    renderAudits((await response.json()).slice(0, 10));
+                }
+            } catch (error) { console.error('Audits error:', error); }
+        }
+
+        function renderAudits(audits) {
+            const tbody = document.getElementById('auditsTableBody');
+            const emptyState = document.getElementById('emptyState');
+
+            if (audits.length === 0) {
+                tbody.innerHTML = '';
+                emptyState.classList.remove('hidden');
+                return;
+            }
+            emptyState.classList.add('hidden');
+
+            tbody.innerHTML = audits.map(audit => `
+                <tr>
+                    <td style="color:var(--text-muted);">#${audit.id}</td>
+                    <td>
+                        <p class="font-medium" style="color:var(--text-primary);">${audit.title || 'Denetim #' + audit.id}</p>
+                        <p class="text-xs" style="color:var(--text-muted);">${audit.branch?.name || ''} ${audit.branch?.company?.name ? '- ' + audit.branch.company.name : ''}</p>
+                    </td>
+                    <td><span class="tp-badge tp-badge-${audit.status}">${getStatusName(audit.status)}</span></td>
+                    <td>${audit.user?.email?.split('@')[0] || '-'}</td>
+                    <td>
+                        <div class="flex items-center gap-2">
+                            <div class="tp-progress-bar"><div class="tp-progress-bar-fill" style="width:${audit.score?.percent || 0}%"></div></div>
+                            <span class="text-sm ${getScoreClass(audit.score?.percent)}">${audit.score?.percent || 0}%</span>
+                        </div>
+                    </td>
+                    <td class="text-sm">${formatDate(audit.createdAt)}</td>
+                    <td>
+                        <a href="${getAuditLink(audit)}" class="tp-btn-ghost" style="color:var(--color-accent);">
+                            <span class="material-symbols-outlined">arrow_forward</span>
+                        </a>
+                    </td>
+                </tr>
+            `).join('');
+        }
+
+        function getStatusName(status) {
+            const names = { 'pending': 'Atandı', 'draft': 'Devam Ediyor', 'submitted': 'Gönderildi', 'approved': 'Onaylandı', 'rejected': 'Reddedildi', 'revision_requested': 'Revizyon' };
+            return names[status] || status;
+        }
+
+        function getScoreClass(p) {
+            if (p >= 80) return 'tp-score-high';
+            if (p >= 60) return 'tp-score-mid';
+            return 'tp-score-low';
+        }
+
+        function getAuditLink(audit) {
+            if (currentUserRole === 'field' && audit.status === 'pending') return `javascript:startAudit(${audit.id})`;
+            if (['draft', 'revision_requested', 'pending'].includes(audit.status)) return `/public/denetim_cevaplama.html?id=${audit.id}`;
+            return `/public/denetim_inceleme.html?id=${audit.id}`;
+        }
+
+        async function startAudit(auditId) {
+            try {
+                const response = await fetch(`${API_URL}/audits/${auditId}/start`, {
+                    method: 'POST', headers: { 'Authorization': `Bearer ${token}` }
+                });
+                if (response.ok) { window.location.href = `/public/denetim_cevaplama.html?id=${auditId}`; }
+                else { const d = await response.json(); alert(d.error || 'Denetim başlatılamadı'); }
+            } catch (error) { alert('Denetim başlatılırken hata oluştu'); }
+        }
+
+        function formatDate(dateStr) {
+            return new Date(dateStr).toLocaleDateString('tr-TR', { day: '2-digit', month: '2-digit', year: 'numeric' });
+        }
+
+        async function createNewAudit() {
+            await loadModalData();
+            document.getElementById('newAuditModal').classList.add('active');
+        }
+
+        function closeNewAuditModal() {
+            document.getElementById('newAuditModal').classList.remove('active');
+        }
+
+        async function loadModalData() {
+            try {
+                const usersRes = await fetch(`${API_URL}/users?role=field`, { headers: { 'Authorization': `Bearer ${token}` } });
+                if (usersRes.ok) {
+                    const users = await usersRes.json();
+                    const select = document.getElementById('auditUserId');
+                    select.innerHTML = '<option value="">Seçin...</option>';
+                    users.forEach(u => select.innerHTML += `<option value="${u.id}">${u.email}</option>`);
+                }
+                const branchesRes = await fetch(`${API_URL}/branches`, { headers: { 'Authorization': `Bearer ${token}` } });
+                if (branchesRes.ok) {
+                    const branches = await branchesRes.json();
+                    const select = document.getElementById('auditBranchId');
+                    select.innerHTML = '<option value="">Seçin...</option>';
+                    branches.forEach(b => select.innerHTML += `<option value="${b.id}">${b.name} - ${b.company?.name || ''}</option>`);
+                }
+            } catch (error) { console.error('Load modal data error:', error); }
+        }
+
+        document.getElementById('newAuditForm').addEventListener('submit', async (e) => {
+            e.preventDefault();
+            const userId = parseInt(document.getElementById('auditUserId').value);
+            const branchId = parseInt(document.getElementById('auditBranchId').value);
+            const scheduledDate = document.getElementById('auditScheduledDate').value;
+            const title = document.getElementById('auditTitle').value;
+
+            try {
+                const response = await fetch(`${API_URL}/audits`, {
+                    method: 'POST',
+                    headers: { 'Authorization': `Bearer ${token}`, 'Content-Type': 'application/json' },
+                    body: JSON.stringify({ userId, branchId, scheduledDate, title })
+                });
+                if (response.ok) {
+                    closeNewAuditModal();
+                    loadAudits();
+                    loadStats();
+                    if (window.showToast) showToast('Denetim başarıyla atandı!', 'success');
+                } else {
+                    const data = await response.json();
+                    alert(data.error || 'Denetim oluşturulamadı');
+                }
+            } catch (error) { alert('Denetim oluşturulurken hata oluştu'); }
+        });
+
+        // Set greeting and date
+        document.getElementById('todayDate').textContent = new Date().toLocaleDateString('tr-TR', { weekday: 'long', day: 'numeric', month: 'long', year: 'numeric' });
+
+        loadUserInfo().then(() => {
+            const name = currentUser?.email?.split('@')[0] || '';
+            document.getElementById('greetingText').textContent = `${LAYOUT.getGreeting()}, ${name}!`;
+        });
+        loadStats();
+        loadAnnualChart();
+        loadAudits();
+    </script>
+</body>
+
+</html>

@@ -1,0 +1,104 @@
+<!DOCTYPE html>
+<html lang="tr">
+
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Bölge Yönetimi - TeftişPro</title>
+    <link rel="preconnect" href="https://fonts.googleapis.com">
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700&display=swap" rel="stylesheet">
+    <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Material+Symbols+Outlined:opsz,wght,FILL,GRAD@24,400,0,0" />
+    <script src="https://cdn.tailwindcss.com"></script>
+    <link rel="stylesheet" href="/public/styles.css">
+    <script src="/public/layout.js"></script>
+</head>
+
+<body>
+    <main>
+        <div class="p-4 lg:p-8 tp-animate-in">
+            <div class="flex items-center justify-between mb-6">
+                <div><h2 class="text-2xl font-bold" style="color:var(--text-primary);">Bölge Yönetimi</h2><p class="text-sm mt-1" style="color:var(--text-muted);">Bölgeleri ekleyin ve yönetin</p></div>
+                <button onclick="openModal()" class="tp-btn tp-btn-primary"><span class="material-symbols-outlined">add</span><span class="hidden sm:inline">Yeni Bölge</span></button>
+            </div>
+
+            <div class="tp-card rounded-2xl p-4 mb-6">
+                <select id="companyFilter" class="tp-input tp-select" style="width:auto;"><option value="">Tüm Şirketler</option></select>
+            </div>
+
+            <div class="tp-card rounded-2xl overflow-hidden">
+                <div class="overflow-x-auto">
+                    <table class="tp-table">
+                        <thead><tr><th>Bölge Adı</th><th>Şirket</th><th>Şube Sayısı</th><th>İşlemler</th></tr></thead>
+                        <tbody id="regionsTable"></tbody>
+                    </table>
+                </div>
+                <div id="loadingState" class="p-8 text-center"><div class="tp-spinner mx-auto"></div></div>
+            </div>
+        </div>
+    </main>
+
+    <div id="modal" class="tp-modal-overlay">
+        <div class="tp-modal max-w-md">
+            <div class="tp-modal-header"><h3 class="tp-modal-title">Yeni Bölge</h3><button onclick="closeModal()" class="tp-btn-ghost"><span class="material-symbols-outlined">close</span></button></div>
+            <form id="regionForm" class="space-y-4">
+                <div><label class="tp-label">Şirket</label><select id="regionCompany" required class="tp-input tp-select"><option value="">Seçin...</option></select></div>
+                <div><label class="tp-label">Bölge Adı</label><input type="text" id="regionName" required class="tp-input" placeholder="Marmara Bölgesi"></div>
+                <button type="submit" class="w-full tp-btn tp-btn-primary py-3">Kaydet</button>
+            </form>
+        </div>
+    </div>
+
+    <script>
+        const API_URL = 'http://localhost:8080';
+        const token = localStorage.getItem('token');
+        if (!token) window.location.href = '/public/login.html';
+        // Sayfa bazlı rol kontrolü
+        if (LAYOUT.getUserRole() !== 'admin') {
+            window.location.href = '/public/kontrol_paneli.html';
+        }
+        let regions = [], companies = [];
+
+        async function load() {
+            try {
+                const [regRes, compRes] = await Promise.all([
+                    fetch(`${API_URL}/regions`, { headers: { 'Authorization': `Bearer ${token}` } }),
+                    fetch(`${API_URL}/companies`, { headers: { 'Authorization': `Bearer ${token}` } })
+                ]);
+                regions = await regRes.json(); companies = await compRes.json();
+                const cs = document.getElementById('regionCompany'), fs = document.getElementById('companyFilter');
+                companies.forEach(c => { cs.innerHTML += `<option value="${c.id}">${c.name}</option>`; fs.innerHTML += `<option value="${c.id}">${c.name}</option>`; });
+                render();
+            } catch (e) { console.error(e); }
+            document.getElementById('loadingState').classList.add('hidden');
+        }
+
+        function render() {
+            const f = document.getElementById('companyFilter').value;
+            const filtered = f ? regions.filter(r => r.companyId == f) : regions;
+            document.getElementById('regionsTable').innerHTML = filtered.map(r => `
+                <tr>
+                    <td><div class="flex items-center gap-3"><div class="tp-stat-icon tp-icon-blue"><span class="material-symbols-outlined">map</span></div><span class="font-medium" style="color:var(--text-primary);">${r.name}</span></div></td>
+                    <td>${r.company?.name || '-'}</td><td>${r.branches?.length || 0}</td>
+                    <td><button onclick="deleteRegion(${r.id})" class="tp-btn-ghost" style="color:var(--text-muted);" onmouseover="this.style.color='#ef4444'" onmouseout="this.style.color='var(--text-muted)'"><span class="material-symbols-outlined">delete</span></button></td>
+                </tr>
+            `).join('') || `<tr><td colspan="4" class="text-center py-8" style="color:var(--text-muted);">Bölge bulunamadı</td></tr>`;
+        }
+
+        document.getElementById('companyFilter').addEventListener('change', render);
+        function openModal() { document.getElementById('modal').classList.add('active'); }
+        function closeModal() { document.getElementById('modal').classList.remove('active'); document.getElementById('regionForm').reset(); }
+
+        document.getElementById('regionForm').addEventListener('submit', async (e) => {
+            e.preventDefault();
+            const name = document.getElementById('regionName').value, companyId = parseInt(document.getElementById('regionCompany').value);
+            try { await fetch(`${API_URL}/regions`, { method: 'POST', headers: { 'Authorization': `Bearer ${token}`, 'Content-Type': 'application/json' }, body: JSON.stringify({ name, companyId }) }); closeModal(); location.reload(); } catch (e) { alert('Hata: ' + e.message); }
+        });
+
+        async function deleteRegion(id) { if (!confirm('Bölgeyi silmek istediğinize emin misiniz?')) return; await fetch(`${API_URL}/regions/${id}`, { method: 'DELETE', headers: { 'Authorization': `Bearer ${token}` } }); location.reload(); }
+
+        load();
+    </script>
+</body>
+
+</html>

@@ -1,0 +1,142 @@
+<!DOCTYPE html>
+<html lang="tr">
+
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Kategori & Soru Yönetimi - TeftişPro</title>
+    <link rel="preconnect" href="https://fonts.googleapis.com">
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700&display=swap" rel="stylesheet">
+    <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Material+Symbols+Outlined:opsz,wght,FILL,GRAD@24,400,0,0" />
+    <script src="https://cdn.tailwindcss.com"></script>
+    <link rel="stylesheet" href="/public/styles.css">
+    <script src="/public/layout.js"></script>
+</head>
+
+<body>
+    <main>
+        <div class="p-4 lg:p-8 tp-animate-in">
+            <div class="flex items-center justify-between mb-6">
+                <div><h2 class="text-2xl font-bold" style="color:var(--text-primary);">Kategori & Soru Yönetimi</h2><p class="text-sm mt-1" style="color:var(--text-muted);">Denetim kategorilerini ve sorularını yönetin</p></div>
+                <div class="flex gap-2">
+                    <button onclick="openCategoryModal()" class="tp-btn tp-btn-primary"><span class="material-symbols-outlined">folder_open</span><span class="hidden sm:inline">Kategori</span></button>
+                    <button onclick="openQuestionModal()" class="tp-btn tp-btn-secondary"><span class="material-symbols-outlined">help</span><span class="hidden sm:inline">Soru</span></button>
+                </div>
+            </div>
+
+            <div id="categoriesContainer" class="space-y-4"></div>
+            <div id="loadingState" class="p-12 text-center"><div class="tp-spinner mx-auto"></div></div>
+        </div>
+    </main>
+
+    <!-- Category Modal -->
+    <div id="categoryModal" class="tp-modal-overlay">
+        <div class="tp-modal max-w-md">
+            <div class="tp-modal-header"><h3 id="categoryModalTitle" class="tp-modal-title">Yeni Kategori</h3><button onclick="closeCategoryModal()" class="tp-btn-ghost"><span class="material-symbols-outlined">close</span></button></div>
+            <form id="categoryForm" class="space-y-4">
+                <div><label class="tp-label">Kategori Adı</label><input type="text" id="categoryTitle" required class="tp-input" placeholder="Hijyen Kontrolleri"></div>
+                <div><label class="tp-label">Açıklama (Opsiyonel)</label><textarea id="categoryDescription" class="tp-input tp-textarea" rows="2" placeholder="Bu kategori..."></textarea></div>
+                <button type="submit" class="w-full tp-btn tp-btn-primary py-3">Kaydet</button>
+            </form>
+        </div>
+    </div>
+
+    <!-- Question Modal -->
+    <div id="questionModal" class="tp-modal-overlay">
+        <div class="tp-modal max-w-lg" style="max-height:90vh;overflow-y:auto;">
+            <div class="tp-modal-header"><h3 id="questionModalTitle" class="tp-modal-title">Yeni Soru</h3><button onclick="closeQuestionModal()" class="tp-btn-ghost"><span class="material-symbols-outlined">close</span></button></div>
+            <form id="questionForm" class="space-y-4">
+                <div><label class="tp-label">Kategori</label><select id="questionCategory" required class="tp-input tp-select"><option value="">Seçin...</option></select></div>
+                <div><label class="tp-label">Soru Metni</label><textarea id="questionText" required class="tp-input tp-textarea" rows="3" placeholder="Mutfak temizliği uygun mu?"></textarea></div>
+                <div><label class="tp-label">Açıklama (Opsiyonel)</label><input type="text" id="questionDescription" class="tp-input" placeholder="Detaylı açıklama..."></div>
+                <div class="grid grid-cols-2 gap-4">
+                    <div><label class="tp-label">Puan</label><input type="number" id="questionPoints" value="10" min="1" max="100" class="tp-input"></div>
+                    <div><label class="tp-label">Sıra No</label><input type="number" id="questionOrder" value="1" min="1" class="tp-input"></div>
+                </div>
+                <div class="flex items-center gap-3">
+                    <input type="checkbox" id="questionNoteRequired" class="accent-emerald-500 w-4 h-4 rounded">
+                    <label for="questionNoteRequired" class="text-sm" style="color:var(--text-secondary);">Not zorunlu mu?</label>
+                </div>
+                <button type="submit" class="w-full tp-btn tp-btn-primary py-3">Kaydet</button>
+            </form>
+        </div>
+    </div>
+
+    <script>
+        const API_URL = 'http://localhost:8080';
+        const token = localStorage.getItem('token');
+        if (!token) window.location.href = '/public/login.html';
+        // Sayfa bazlı rol kontrolü
+        if (!['admin', 'planlamacı'].includes(LAYOUT.getUserRole())) {
+            window.location.href = '/public/kontrol_paneli.html';
+        }
+        let categories = [], editCategoryId = null, editQuestionId = null;
+
+        async function load() {
+            try { const r = await fetch(`${API_URL}/categories`, { headers: { 'Authorization': `Bearer ${token}` } }); categories = await r.json(); render(); populateCategorySelect(); } catch (e) { console.error(e); }
+            document.getElementById('loadingState').classList.add('hidden');
+        }
+
+        function render() {
+            document.getElementById('categoriesContainer').innerHTML = categories.map(cat => `
+                <div class="tp-card rounded-2xl overflow-hidden">
+                    <div class="p-4 flex items-center justify-between" style="border-bottom:1px solid var(--border-color);">
+                        <div class="flex items-center gap-3">
+                            <div class="tp-stat-icon tp-icon-green"><span class="material-symbols-outlined">folder</span></div>
+                            <div><h3 class="font-semibold" style="color:var(--text-primary);">${cat.title}</h3><p class="text-sm" style="color:var(--text-muted);">${cat.questions?.length || 0} soru</p></div>
+                        </div>
+                        <div class="flex gap-1">
+                            <button onclick="editCategory(${cat.id})" class="tp-btn-ghost"><span class="material-symbols-outlined">edit</span></button>
+                            <button onclick="deleteCategory(${cat.id})" class="tp-btn-ghost" style="color:var(--text-muted);" onmouseover="this.style.color='#ef4444'" onmouseout="this.style.color='var(--text-muted)'"><span class="material-symbols-outlined">delete</span></button>
+                        </div>
+                    </div>
+                    <div>
+                        ${(cat.questions || []).map(q => `
+                            <div class="p-4 flex items-center gap-4 transition-colors" style="border-bottom:1px solid var(--border-color);"
+                                 onmouseover="this.style.background='var(--bg-hover)'" onmouseout="this.style.background=''">
+                                <span class="w-8 h-8 rounded-lg flex items-center justify-center text-sm" style="background:var(--bg-input);color:var(--text-muted);">${q.order || '-'}</span>
+                                <div class="flex-1"><p style="color:var(--text-primary);">${q.text}</p>${q.description ? `<p class="text-sm" style="color:var(--text-muted);">${q.description}</p>` : ''}</div>
+                                <span class="text-sm" style="color:var(--text-muted);">${q.points}p</span>
+                                <div class="flex gap-1">
+                                    <button onclick="editQuestion(${q.id})" class="tp-btn-ghost" style="padding:0.25rem;"><span class="material-symbols-outlined text-lg">edit</span></button>
+                                    <button onclick="deleteQuestion(${q.id})" class="tp-btn-ghost" style="padding:0.25rem;color:var(--text-muted);" onmouseover="this.style.color='#ef4444'" onmouseout="this.style.color='var(--text-muted)'"><span class="material-symbols-outlined text-lg">delete</span></button>
+                                </div>
+                            </div>
+                        `).join('') || `<p class="p-4 text-center" style="color:var(--text-muted);">Henüz soru eklenmedi</p>`}
+                    </div>
+                </div>
+            `).join('') || `<div class="tp-empty-state"><span class="material-symbols-outlined">category</span><p>Henüz kategori eklenmedi</p></div>`;
+        }
+
+        function populateCategorySelect() { const s = document.getElementById('questionCategory'); s.innerHTML = '<option value="">Seçin...</option>'; categories.forEach(c => s.innerHTML += `<option value="${c.id}">${c.title}</option>`); }
+
+        function openCategoryModal() { editCategoryId = null; document.getElementById('categoryModalTitle').textContent = 'Yeni Kategori'; document.getElementById('categoryForm').reset(); document.getElementById('categoryModal').classList.add('active'); }
+        function closeCategoryModal() { document.getElementById('categoryModal').classList.remove('active'); }
+        function editCategory(id) { const c = categories.find(x => x.id === id); if (!c) return; editCategoryId = id; document.getElementById('categoryModalTitle').textContent = 'Kategori Düzenle'; document.getElementById('categoryTitle').value = c.title; document.getElementById('categoryDescription').value = c.description || ''; document.getElementById('categoryModal').classList.add('active'); }
+
+        document.getElementById('categoryForm').addEventListener('submit', async (e) => {
+            e.preventDefault();
+            const data = { title: document.getElementById('categoryTitle').value, description: document.getElementById('categoryDescription').value };
+            try { await fetch(editCategoryId ? `${API_URL}/categories/${editCategoryId}` : `${API_URL}/categories`, { method: editCategoryId ? 'PUT' : 'POST', headers: { 'Authorization': `Bearer ${token}`, 'Content-Type': 'application/json' }, body: JSON.stringify(data) }); closeCategoryModal(); location.reload(); } catch (e) { alert('Hata: ' + e.message); }
+        });
+
+        async function deleteCategory(id) { if (!confirm('Kategoriyi ve tüm sorularını silmek istediğinize emin misiniz?')) return; await fetch(`${API_URL}/categories/${id}`, { method: 'DELETE', headers: { 'Authorization': `Bearer ${token}` } }); location.reload(); }
+
+        function openQuestionModal(cid) { editQuestionId = null; document.getElementById('questionModalTitle').textContent = 'Yeni Soru'; document.getElementById('questionForm').reset(); if (cid) document.getElementById('questionCategory').value = cid; document.getElementById('questionModal').classList.add('active'); }
+        function closeQuestionModal() { document.getElementById('questionModal').classList.remove('active'); }
+        function editQuestion(id) { let q = null; for (const c of categories) { q = c.questions?.find(x => x.id === id); if (q) break; } if (!q) return; editQuestionId = id; document.getElementById('questionModalTitle').textContent = 'Soru Düzenle'; document.getElementById('questionCategory').value = q.categoryId; document.getElementById('questionText').value = q.text; document.getElementById('questionDescription').value = q.description || ''; document.getElementById('questionPoints').value = q.points; document.getElementById('questionOrder').value = q.order || 1; document.getElementById('questionNoteRequired').checked = q.noteRequired || false; document.getElementById('questionModal').classList.add('active'); }
+
+        document.getElementById('questionForm').addEventListener('submit', async (e) => {
+            e.preventDefault();
+            const data = { categoryId: parseInt(document.getElementById('questionCategory').value), text: document.getElementById('questionText').value, description: document.getElementById('questionDescription').value, points: parseInt(document.getElementById('questionPoints').value), order: parseInt(document.getElementById('questionOrder').value), noteRequired: document.getElementById('questionNoteRequired').checked };
+            try { await fetch(editQuestionId ? `${API_URL}/questions/${editQuestionId}` : `${API_URL}/questions`, { method: editQuestionId ? 'PUT' : 'POST', headers: { 'Authorization': `Bearer ${token}`, 'Content-Type': 'application/json' }, body: JSON.stringify(data) }); closeQuestionModal(); location.reload(); } catch (e) { alert('Hata: ' + e.message); }
+        });
+
+        async function deleteQuestion(id) { if (!confirm('Soruyu silmek istediğinize emin misiniz?')) return; await fetch(`${API_URL}/questions/${id}`, { method: 'DELETE', headers: { 'Authorization': `Bearer ${token}` } }); location.reload(); }
+
+        load();
+    </script>
+</body>
+
+</html>

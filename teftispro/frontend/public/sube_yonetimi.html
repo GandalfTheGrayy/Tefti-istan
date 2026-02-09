@@ -1,0 +1,128 @@
+<!DOCTYPE html>
+<html lang="tr">
+
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Şube Yönetimi - TeftişPro</title>
+    <link rel="preconnect" href="https://fonts.googleapis.com">
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700&display=swap" rel="stylesheet">
+    <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Material+Symbols+Outlined:opsz,wght,FILL,GRAD@24,400,0,0" />
+    <script src="https://cdn.tailwindcss.com"></script>
+    <link rel="stylesheet" href="/public/styles.css">
+    <script src="/public/layout.js"></script>
+</head>
+
+<body>
+    <main>
+        <div class="p-4 lg:p-8 tp-animate-in">
+            <div class="flex items-center justify-between mb-6">
+                <div><h2 class="text-2xl font-bold" style="color:var(--text-primary);">Şube Yönetimi</h2><p class="text-sm mt-1" style="color:var(--text-muted);">Şubeleri ekleyin ve yönetin</p></div>
+                <button onclick="openModal()" class="tp-btn tp-btn-primary"><span class="material-symbols-outlined">add</span><span class="hidden sm:inline">Yeni Şube</span></button>
+            </div>
+
+            <div class="tp-card rounded-2xl p-4 mb-6 flex flex-wrap gap-4">
+                <div class="relative flex-1 min-w-[200px]">
+                    <span class="material-symbols-outlined absolute left-4 top-1/2 -translate-y-1/2" style="color:var(--text-muted);">search</span>
+                    <input type="text" id="searchInput" placeholder="Şube ara..." class="tp-input" style="padding-left:3rem;">
+                </div>
+                <select id="companyFilter" class="tp-input tp-select" style="width:auto;"><option value="">Tüm Şirketler</option></select>
+                <select id="regionFilter" class="tp-input tp-select" style="width:auto;"><option value="">Tüm Bölgeler</option></select>
+            </div>
+
+            <div class="tp-card rounded-2xl overflow-hidden">
+                <div class="overflow-x-auto">
+                    <table class="tp-table">
+                        <thead><tr><th>Şube</th><th>Şehir</th><th>Bölge</th><th>Şirket</th><th>Durum</th><th>İşlemler</th></tr></thead>
+                        <tbody id="branchesTable"></tbody>
+                    </table>
+                </div>
+                <div id="loadingState" class="p-8 text-center"><div class="tp-spinner mx-auto"></div></div>
+            </div>
+        </div>
+    </main>
+
+    <div id="modal" class="tp-modal-overlay">
+        <div class="tp-modal max-w-md" style="max-height:90vh;overflow-y:auto;">
+            <div class="tp-modal-header"><h3 class="tp-modal-title">Yeni Şube</h3><button onclick="closeModal()" class="tp-btn-ghost"><span class="material-symbols-outlined">close</span></button></div>
+            <form id="branchForm" class="space-y-4">
+                <div><label class="tp-label">Şirket</label><select id="branchCompany" required class="tp-input tp-select" onchange="loadRegionsForCompany()"><option value="">Seçin...</option></select></div>
+                <div><label class="tp-label">Bölge (Opsiyonel)</label><select id="branchRegion" class="tp-input tp-select"><option value="">Seçin...</option></select></div>
+                <div><label class="tp-label">Şube Adı</label><input type="text" id="branchName" required class="tp-input" placeholder="Kadıköy Şubesi"></div>
+                <div><label class="tp-label">Şehir</label><input type="text" id="branchCity" required class="tp-input" placeholder="İstanbul"></div>
+                <div><label class="tp-label">Adres</label><input type="text" id="branchAddress" class="tp-input" placeholder="Cadde, Sokak, No"></div>
+                <div class="grid grid-cols-2 gap-4">
+                    <div><label class="tp-label">Telefon</label><input type="tel" id="branchPhone" class="tp-input" placeholder="0212..."></div>
+                    <div><label class="tp-label">E-posta</label><input type="email" id="branchEmail" class="tp-input" placeholder="sube@..."></div>
+                </div>
+                <button type="submit" class="w-full tp-btn tp-btn-primary py-3">Kaydet</button>
+            </form>
+        </div>
+    </div>
+
+    <script>
+        const API_URL = 'http://localhost:8080';
+        const token = localStorage.getItem('token');
+        if (!token) window.location.href = '/public/login.html';
+        // Sayfa bazlı rol kontrolü
+        if (LAYOUT.getUserRole() !== 'admin') {
+            window.location.href = '/public/kontrol_paneli.html';
+        }
+        let branches = [], companies = [], regions = [];
+
+        async function load() {
+            try {
+                const [brRes, compRes, regRes] = await Promise.all([
+                    fetch(`${API_URL}/branches`, { headers: { 'Authorization': `Bearer ${token}` } }),
+                    fetch(`${API_URL}/companies`, { headers: { 'Authorization': `Bearer ${token}` } }),
+                    fetch(`${API_URL}/regions`, { headers: { 'Authorization': `Bearer ${token}` } })
+                ]);
+                branches = await brRes.json(); companies = await compRes.json(); regions = await regRes.json();
+                const cs = document.getElementById('branchCompany'), fc = document.getElementById('companyFilter'), fr = document.getElementById('regionFilter');
+                companies.forEach(c => { cs.innerHTML += `<option value="${c.id}">${c.name}</option>`; fc.innerHTML += `<option value="${c.id}">${c.name}</option>`; });
+                regions.forEach(r => fr.innerHTML += `<option value="${r.id}">${r.name}</option>`);
+                render();
+            } catch (e) { console.error(e); }
+            document.getElementById('loadingState').classList.add('hidden');
+        }
+
+        function loadRegionsForCompany() {
+            const cid = document.getElementById('branchCompany').value;
+            const rs = document.getElementById('branchRegion'); rs.innerHTML = '<option value="">Seçin...</option>';
+            regions.filter(r => r.companyId == cid).forEach(r => rs.innerHTML += `<option value="${r.id}">${r.name}</option>`);
+        }
+
+        function render() {
+            const search = document.getElementById('searchInput').value.toLowerCase(), cf = document.getElementById('companyFilter').value, rf = document.getElementById('regionFilter').value;
+            const filtered = branches.filter(b => { const ms = !search || b.name.toLowerCase().includes(search) || b.city.toLowerCase().includes(search); const mc = !cf || b.companyId == cf; const mr = !rf || b.regionId == rf; return ms && mc && mr; });
+            document.getElementById('branchesTable').innerHTML = filtered.map(b => `
+                <tr>
+                    <td><div class="flex items-center gap-3"><div class="tp-stat-icon tp-icon-purple"><span class="material-symbols-outlined">store</span></div><span class="font-medium" style="color:var(--text-primary);">${b.name}</span></div></td>
+                    <td>${b.city}</td><td>${b.region?.name || '-'}</td><td>${b.company?.name || '-'}</td>
+                    <td><span class="tp-badge ${b.isActive ? 'tp-badge-approved' : 'tp-badge-draft'}">${b.isActive ? 'Aktif' : 'Pasif'}</span></td>
+                    <td><button onclick="deleteBranch(${b.id})" class="tp-btn-ghost" style="color:var(--text-muted);" onmouseover="this.style.color='#ef4444'" onmouseout="this.style.color='var(--text-muted)'"><span class="material-symbols-outlined">delete</span></button></td>
+                </tr>
+            `).join('') || `<tr><td colspan="6" class="text-center py-8" style="color:var(--text-muted);">Şube bulunamadı</td></tr>`;
+        }
+
+        document.getElementById('searchInput').addEventListener('input', render);
+        document.getElementById('companyFilter').addEventListener('change', render);
+        document.getElementById('regionFilter').addEventListener('change', render);
+
+        function openModal() { document.getElementById('modal').classList.add('active'); }
+        function closeModal() { document.getElementById('modal').classList.remove('active'); document.getElementById('branchForm').reset(); }
+
+        document.getElementById('branchForm').addEventListener('submit', async (e) => {
+            e.preventDefault();
+            const data = { name: document.getElementById('branchName').value, city: document.getElementById('branchCity').value, address: document.getElementById('branchAddress').value, phone: document.getElementById('branchPhone').value, email: document.getElementById('branchEmail').value, companyId: parseInt(document.getElementById('branchCompany').value), regionId: document.getElementById('branchRegion').value ? parseInt(document.getElementById('branchRegion').value) : undefined };
+            try { await fetch(`${API_URL}/branches`, { method: 'POST', headers: { 'Authorization': `Bearer ${token}`, 'Content-Type': 'application/json' }, body: JSON.stringify(data) }); closeModal(); location.reload(); } catch (e) { alert('Hata: ' + e.message); }
+        });
+
+        async function deleteBranch(id) { if (!confirm('Şubeyi silmek istediğinize emin misiniz?')) return; await fetch(`${API_URL}/branches/${id}`, { method: 'DELETE', headers: { 'Authorization': `Bearer ${token}` } }); location.reload(); }
+
+        load();
+    </script>
+</body>
+
+</html>

@@ -1,0 +1,333 @@
+<!DOCTYPE html>
+<html lang="tr">
+
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Denetim Cevaplama - TeftişPro</title>
+    <meta name="description" content="Denetim sorularını cevaplayın">
+    <link rel="preconnect" href="https://fonts.googleapis.com">
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700&display=swap" rel="stylesheet">
+    <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Material+Symbols+Outlined:opsz,wght,FILL,GRAD@24,400,0,0" />
+    <script src="https://cdn.tailwindcss.com"></script>
+    <link rel="stylesheet" href="/public/styles.css">
+    <script src="/public/layout.js"></script>
+</head>
+
+<body data-custom-header>
+    <main>
+        <!-- Inline Header for this page -->
+        <div class="sticky top-0 z-30 backdrop-blur-md" style="background:var(--bg-header);border-bottom:1px solid var(--border-color);" id="pageHeader">
+            <div class="flex items-center justify-between px-4 lg:px-8 py-3">
+                <div class="flex items-center gap-4">
+                    <a href="/public/kontrol_paneli.html" class="tp-btn-ghost">
+                        <span class="material-symbols-outlined">arrow_back</span>
+                    </a>
+                    <div>
+                        <h1 id="auditTitle" class="text-lg font-semibold" style="color:var(--text-primary);">Denetim</h1>
+                        <p id="auditInfo" class="text-sm" style="color:var(--text-muted);">Yükleniyor...</p>
+                    </div>
+                </div>
+                <div class="flex items-center gap-3">
+                    <div id="saveStatus" class="hidden items-center gap-2 text-sm" style="color:var(--text-muted);">
+                        <span class="material-symbols-outlined text-lg animate-spin">sync</span>
+                        <span>Kaydediliyor...</span>
+                    </div>
+                    <button onclick="submitAudit()" id="submitBtn" class="tp-btn tp-btn-primary">
+                        <span class="material-symbols-outlined">send</span>
+                        <span class="hidden sm:inline">Gönder</span>
+                    </button>
+                </div>
+            </div>
+            <!-- Progress Bar -->
+            <div class="h-1" style="background:var(--bg-hover);">
+                <div id="progressBar" class="h-full transition-all duration-300" style="width:0%;background:var(--color-accent);"></div>
+            </div>
+        </div>
+
+        <!-- Content -->
+        <div class="max-w-4xl mx-auto p-4 lg:p-8 pb-24">
+            <div id="branchSelection" class="hidden tp-card rounded-2xl p-6 mb-6">
+                <h3 class="text-lg font-semibold mb-4" style="color:var(--text-primary);">Şube Seçin</h3>
+                <select id="branchSelect" class="tp-input tp-select">
+                    <option value="">Şube seçin...</option>
+                </select>
+                <button onclick="saveBranch()" class="mt-4 tp-btn tp-btn-primary">Devam Et</button>
+            </div>
+
+            <div id="categoriesContainer" class="space-y-4"></div>
+
+            <div id="loadingState" class="text-center py-12">
+                <div class="tp-spinner mx-auto"></div>
+                <p class="mt-4" style="color:var(--text-muted);">Yükleniyor...</p>
+            </div>
+        </div>
+    </main>
+
+    <!-- Signature Modal -->
+    <div id="signatureModal" class="tp-modal-overlay">
+        <div class="tp-modal max-w-lg">
+            <div class="tp-modal-header">
+                <h3 class="tp-modal-title">Denetimi Tamamla</h3>
+                <button onclick="closeSignatureModal()" class="tp-btn-ghost"><span class="material-symbols-outlined">close</span></button>
+            </div>
+            <div class="flex gap-2 mb-4 p-1 rounded-xl" style="background:var(--bg-input);">
+                <button id="sigTabauditor" onclick="switchSignatureTab('auditor')" class="flex-1 py-2 rounded-lg text-sm font-medium transition-colors" style="border:1px solid transparent;">Denetçi</button>
+                <button id="sigTabclient" onclick="switchSignatureTab('client')" class="flex-1 py-2 rounded-lg text-sm font-medium transition-colors" style="border:1px solid transparent;">Karşı Taraf</button>
+            </div>
+            <p id="signatureTitle" class="text-sm mb-2 text-center" style="color:var(--text-muted);">İmza Alanı</p>
+            <div class="bg-white rounded-xl p-2 mb-4"><canvas id="signatureCanvas" class="w-full h-48 cursor-crosshair touch-none"></canvas></div>
+            <div class="flex gap-3">
+                <button onclick="clearSignature()" class="flex-1 tp-btn tp-btn-secondary">Temizle</button>
+                <button onclick="saveCurrentSignature()" class="flex-1 tp-btn tp-btn-primary">Kaydet ve İlerle</button>
+            </div>
+        </div>
+    </div>
+
+    <!-- Photo Modal -->
+    <div id="photoModal" class="tp-modal-overlay">
+        <div class="tp-modal max-w-md">
+            <div class="tp-modal-header">
+                <h3 class="tp-modal-title">Fotoğraf Yükle</h3>
+                <button onclick="closePhotoModal()" class="tp-btn-ghost"><span class="material-symbols-outlined">close</span></button>
+            </div>
+            <input type="file" id="photoInput" accept="image/*" class="hidden" onchange="uploadPhoto()">
+            <div onclick="document.getElementById('photoInput').click()" class="border-2 border-dashed rounded-xl p-8 text-center cursor-pointer transition-colors" style="border-color:var(--border-color);"
+                 onmouseover="this.style.borderColor='var(--color-accent)'" onmouseout="this.style.borderColor='var(--border-color)'">
+                <span class="material-symbols-outlined text-4xl mb-2" style="color:var(--text-muted);">add_photo_alternate</span>
+                <p style="color:var(--text-secondary);">Fotoğraf seçmek için tıklayın</p>
+            </div>
+            <div id="uploadedPhotos" class="mt-4 grid grid-cols-3 gap-2"></div>
+        </div>
+    </div>
+
+    <script>
+        const API_URL = 'http://localhost:8080';
+        const token = localStorage.getItem('token');
+        if (!token) window.location.href = '/public/login.html';
+        // Sayfa bazlı rol kontrolü: sadece field ve admin cevaplama yapabilir
+        if (!['admin', 'field'].includes(LAYOUT.getUserRole())) {
+            window.location.href = '/public/kontrol_paneli.html';
+        }
+
+        const urlParams = new URLSearchParams(window.location.search);
+        const auditId = urlParams.get('id');
+        if (!auditId) window.location.href = '/public/kontrol_paneli.html';
+
+        let audit = null, categories = [], answers = {}, currentPhotoQuestionId = null;
+        let signatureCanvas, signatureCtx, isDrawing = false;
+
+        async function loadAudit() {
+            try {
+                const [auditRes, catRes] = await Promise.all([
+                    fetch(`${API_URL}/audits/${auditId}`, { headers: { 'Authorization': `Bearer ${token}` } }),
+                    fetch(`${API_URL}/categories`, { headers: { 'Authorization': `Bearer ${token}` } })
+                ]);
+                if (!auditRes.ok) throw new Error('Denetim bulunamadı');
+                const auditData = await auditRes.json();
+                audit = auditData.audit;
+                categories = await catRes.json();
+
+                if (audit.status === 'pending') {
+                    const startRes = await fetch(`${API_URL}/audits/${auditId}/start`, { method: 'POST', headers: { 'Authorization': `Bearer ${token}` } });
+                    if (startRes.ok) audit.status = 'draft';
+                    else { const e = await startRes.json(); alert(e.error || 'Denetim başlatılamadı'); window.location.href = '/public/kontrol_paneli.html'; return; }
+                }
+
+                audit.answers.forEach(a => { answers[a.questionId] = { value: a.value, note: a.note || '' }; });
+
+                document.getElementById('auditTitle').textContent = audit.title || `Denetim #${audit.id}`;
+                document.getElementById('auditInfo').textContent = audit.branch ? `${audit.branch.name} - ${audit.branch.company?.name || ''}` : 'Şube seçilmedi';
+                document.getElementById('loadingState').classList.add('hidden');
+
+                if (!audit.branchId) { await loadBranches(); document.getElementById('branchSelection').classList.remove('hidden'); }
+                renderCategories();
+                updateProgress();
+            } catch (error) { console.error(error); alert('Denetim yüklenemedi'); window.location.href = '/public/kontrol_paneli.html'; }
+        }
+
+        async function loadBranches() {
+            const r = await fetch(`${API_URL}/branches`, { headers: { 'Authorization': `Bearer ${token}` } });
+            if (r.ok) { const branches = await r.json(); const s = document.getElementById('branchSelect'); branches.forEach(b => s.innerHTML += `<option value="${b.id}">${b.name} - ${b.company?.name || ''}</option>`); }
+        }
+
+        async function saveBranch() { const branchId = document.getElementById('branchSelect').value; if (!branchId) return alert('Lütfen bir şube seçin'); document.getElementById('branchSelection').classList.add('hidden'); }
+
+        function renderCategories() {
+            const container = document.getElementById('categoriesContainer');
+            container.innerHTML = categories.map((cat, ci) => `
+                <div class="tp-card rounded-2xl overflow-hidden">
+                    <button onclick="toggleAccordion(${ci})" class="w-full flex items-center justify-between p-5 text-left transition-colors"
+                            onmouseover="this.style.background='var(--bg-hover)'" onmouseout="this.style.background=''">
+                        <div class="flex items-center gap-3">
+                            <div class="tp-stat-icon tp-icon-green"><span class="material-symbols-outlined">folder</span></div>
+                            <div>
+                                <h3 class="font-semibold" style="color:var(--text-primary);">${cat.title}</h3>
+                                <p class="text-sm" style="color:var(--text-muted);">${cat.questions.length} soru</p>
+                            </div>
+                        </div>
+                        <div class="flex items-center gap-3">
+                            <span class="text-sm" style="color:var(--text-muted);" id="catProgress${ci}">0/${cat.questions.length}</span>
+                            <span class="material-symbols-outlined transition-transform" style="color:var(--text-muted);" id="chevron${ci}">expand_more</span>
+                        </div>
+                    </button>
+                    <div class="tp-accordion-content" id="accordion${ci}">
+                        <div class="p-5 pt-0 space-y-4">
+                            ${cat.questions.map((q, qi) => renderQuestion(q, ci, qi)).join('')}
+                        </div>
+                    </div>
+                </div>
+            `).join('');
+            if (categories.length > 0) toggleAccordion(0);
+        }
+
+        function renderQuestion(q, ci, qi) {
+            const a = answers[q.id] || { value: '', note: '' };
+            const photos = audit.photos?.filter(p => p.questionId === q.id) || [];
+            return `
+                <div class="rounded-xl p-4" style="background:var(--bg-input);border:1px solid var(--border-color);" id="question${q.id}">
+                    <div class="flex items-start justify-between gap-4 mb-3">
+                        <div class="flex-1">
+                            <p style="color:var(--text-primary);">${q.text}</p>
+                            ${q.description ? `<p class="text-sm mt-1" style="color:var(--text-muted);">${q.description}</p>` : ''}
+                        </div>
+                        <span class="text-sm" style="color:var(--text-muted);">${q.points} puan</span>
+                    </div>
+                    <div class="flex gap-2 mb-3">
+                        <button onclick="setAnswer(${q.id}, 'U')" class="answer-btn answer-U flex-1 py-2.5 flex items-center justify-center gap-1 ${a.value === 'U' ? 'selected' : ''}">
+                            <span class="material-symbols-outlined text-lg">check</span><span class="text-sm">Uygun</span>
+                        </button>
+                        <button onclick="setAnswer(${q.id}, 'YP')" class="answer-btn answer-YP flex-1 py-2.5 flex items-center justify-center gap-1 ${a.value === 'YP' ? 'selected' : ''}">
+                            <span class="material-symbols-outlined text-lg">remove</span><span class="text-sm">Yarı</span>
+                        </button>
+                        <button onclick="setAnswer(${q.id}, 'UD')" class="answer-btn answer-UD flex-1 py-2.5 flex items-center justify-center gap-1 ${a.value === 'UD' ? 'selected' : ''}">
+                            <span class="material-symbols-outlined text-lg">close</span><span class="text-sm">Değil</span>
+                        </button>
+                        <button onclick="setAnswer(${q.id}, 'DD')" class="answer-btn answer-DD flex-1 py-2.5 flex items-center justify-center gap-1 ${a.value === 'DD' ? 'selected' : ''}">
+                            <span class="material-symbols-outlined text-lg">block</span><span class="text-sm">N/A</span>
+                        </button>
+                    </div>
+                    <div id="noteField${q.id}" class="${a.value === 'UD' || q.noteRequired ? '' : 'hidden'}">
+                        <textarea id="note${q.id}" placeholder="Açıklama yazın... ${q.noteRequired || a.value === 'UD' ? '(zorunlu)' : ''}" class="tp-input tp-textarea" rows="2" onchange="saveNote(${q.id})">${a.note}</textarea>
+                    </div>
+                    <div class="flex items-center gap-2 mt-3">
+                        <button onclick="openPhotoModal(${q.id})" class="tp-btn tp-btn-secondary text-sm py-1.5 px-3">
+                            <span class="material-symbols-outlined text-lg">photo_camera</span> Fotoğraf
+                        </button>
+                        <div id="photoPreview${q.id}" class="flex gap-2">
+                            ${photos.map(p => `<img src="${API_URL}${p.url}" class="w-10 h-10 rounded-lg object-cover">`).join('')}
+                        </div>
+                    </div>
+                </div>
+            `;
+        }
+
+        function toggleAccordion(i) { const a = document.getElementById(`accordion${i}`); const c = document.getElementById(`chevron${i}`); a.classList.toggle('open'); c.style.transform = a.classList.contains('open') ? 'rotate(180deg)' : ''; }
+
+        function setAnswer(qId, value) {
+            if (answers[qId]?.value === value) delete answers[qId];
+            else answers[qId] = { value, note: answers[qId]?.note || '' };
+            const container = document.getElementById(`question${qId}`);
+            container.querySelectorAll('.answer-btn').forEach(b => b.classList.remove('selected'));
+            if (answers[qId]) container.querySelector(`.answer-${value}`).classList.add('selected');
+            const nf = document.getElementById(`noteField${qId}`);
+            if (value === 'UD') nf.classList.remove('hidden'); else nf.classList.add('hidden');
+            updateProgress(); debouncedSave();
+        }
+
+        function saveNote(qId) { const n = document.getElementById(`note${qId}`).value; if (answers[qId]) answers[qId].note = n; debouncedSave(); }
+
+        function updateProgress() {
+            const total = categories.reduce((s, c) => s + c.questions.length, 0);
+            const answered = Object.keys(answers).length;
+            const pct = total > 0 ? Math.round((answered / total) * 100) : 0;
+            document.getElementById('progressBar').style.width = `${pct}%`;
+            categories.forEach((cat, i) => { const ca = cat.questions.filter(q => answers[q.id]).length; document.getElementById(`catProgress${i}`).textContent = `${ca}/${cat.questions.length}`; });
+        }
+
+        let saveTimeout;
+        function debouncedSave() {
+            clearTimeout(saveTimeout);
+            const ss = document.getElementById('saveStatus'); ss.classList.remove('hidden'); ss.classList.add('flex');
+            saveTimeout = setTimeout(async () => { await saveAnswers(); ss.classList.add('hidden'); }, 1000);
+        }
+
+        async function saveAnswers() {
+            const items = Object.entries(answers).map(([qId, d]) => ({ questionId: parseInt(qId), value: d.value, note: d.note }));
+            try { await fetch(`${API_URL}/audits/${auditId}/answers`, { method: 'POST', headers: { 'Authorization': `Bearer ${token}`, 'Content-Type': 'application/json' }, body: JSON.stringify({ items }) }); } catch (e) { console.error('Save error:', e); }
+        }
+
+        function openPhotoModal(qId) { currentPhotoQuestionId = qId; document.getElementById('photoModal').classList.add('active'); }
+        function closePhotoModal() { document.getElementById('photoModal').classList.remove('active'); currentPhotoQuestionId = null; }
+
+        async function uploadPhoto() {
+            const file = document.getElementById('photoInput').files[0]; if (!file) return;
+            const fd = new FormData(); fd.append('file', file); if (currentPhotoQuestionId) fd.append('questionId', currentPhotoQuestionId);
+            try {
+                const r = await fetch(`${API_URL}/audits/${auditId}/photos`, { method: 'POST', headers: { 'Authorization': `Bearer ${token}` }, body: fd });
+                if (r.ok) { const photo = await r.json(); document.getElementById(`photoPreview${currentPhotoQuestionId}`).innerHTML += `<img src="${API_URL}${photo.url}" class="w-10 h-10 rounded-lg object-cover">`; closePhotoModal(); }
+            } catch (e) { alert('Fotoğraf yüklenemedi'); }
+            document.getElementById('photoInput').value = '';
+        }
+
+        async function submitAudit() {
+            const total = categories.reduce((s, c) => s + c.questions.length, 0);
+            if (Object.keys(answers).length < total && !confirm(`${total - Object.keys(answers).length} soru cevaplanmadı. Yine de göndermek istiyor musunuz?`)) return;
+            for (const [qId, d] of Object.entries(answers)) { if (d.value === 'UD' && !d.note) { alert('Uygun Değil seçilen sorular için açıklama zorunludur.'); return; } }
+            await saveAnswers(); openSignatureModal();
+        }
+
+        let currentSignatureType = 'auditor', signatures = { auditor: null, client: null };
+
+        function openSignatureModal() { document.getElementById('signatureModal').classList.add('active'); switchSignatureTab('auditor'); }
+        function closeSignatureModal() { document.getElementById('signatureModal').classList.remove('active'); }
+
+        function switchSignatureTab(type) {
+            currentSignatureType = type;
+            ['auditor', 'client'].forEach(t => {
+                const btn = document.getElementById(`sigTab${t}`);
+                if (t === type) { btn.style.background = 'rgba(16,185,129,0.15)'; btn.style.color = 'var(--color-accent)'; btn.style.borderColor = 'var(--color-accent)'; }
+                else { btn.style.background = ''; btn.style.color = 'var(--text-secondary)'; btn.style.borderColor = 'transparent'; }
+            });
+            document.getElementById('signatureTitle').textContent = type === 'auditor' ? 'Denetçi İmzası' : 'Karşı Taraf İmzası';
+            initSignatureCanvas();
+        }
+
+        function initSignatureCanvas() {
+            signatureCanvas = document.getElementById('signatureCanvas'); signatureCtx = signatureCanvas.getContext('2d');
+            signatureCtx.clearRect(0, 0, signatureCanvas.width, signatureCanvas.height);
+            signatureCanvas.width = signatureCanvas.offsetWidth; signatureCanvas.height = signatureCanvas.offsetHeight;
+            signatureCtx.strokeStyle = '#000'; signatureCtx.lineWidth = 2; signatureCtx.lineCap = 'round';
+            signatureCanvas.onmousedown = startDrawing; signatureCanvas.onmousemove = draw; signatureCanvas.onmouseup = stopDrawing; signatureCanvas.onmouseleave = stopDrawing;
+            signatureCanvas.ontouchstart = (e) => { e.preventDefault(); startDrawing(e.touches[0]); };
+            signatureCanvas.ontouchmove = (e) => { e.preventDefault(); draw(e.touches[0]); };
+            signatureCanvas.ontouchend = stopDrawing;
+        }
+        function clearSignature() { signatureCtx.clearRect(0, 0, signatureCanvas.width, signatureCanvas.height); signatures[currentSignatureType] = null; }
+        function saveCurrentSignature() {
+            signatures[currentSignatureType] = signatureCanvas.toDataURL('image/png');
+            if (currentSignatureType === 'auditor') switchSignatureTab('client');
+            else { if (!signatures.auditor) { alert('Lütfen önce denetçi imzasını atın.'); switchSignatureTab('auditor'); return; } finishAudit(); }
+        }
+        async function finishAudit() {
+            try {
+                const fd = new FormData();
+                const b64toBlob = (d) => { const bs = atob(d.split(',')[1]); const ab = new ArrayBuffer(bs.length); const ia = new Uint8Array(ab); for (let i = 0; i < bs.length; i++) ia[i] = bs.charCodeAt(i); return new Blob([ab], { type: 'image/png' }); };
+                fd.append('auditorSignature', b64toBlob(signatures.auditor)); fd.append('clientSignature', b64toBlob(signatures.client));
+                const ur = await fetch(`${API_URL}/audits/${auditId}/signatures`, { method: 'POST', headers: { 'Authorization': `Bearer ${token}` }, body: fd });
+                if (!ur.ok) throw new Error('İmzalar kaydedilemedi');
+                const sr = await fetch(`${API_URL}/audits/${auditId}/submit`, { method: 'POST', headers: { 'Authorization': `Bearer ${token}`, 'Content-Type': 'application/json' } });
+                if (!sr.ok) throw new Error('Denetim gönderilemedi');
+                alert('Denetim başarıyla tamamlandı!'); window.location.href = '/public/denetim_listesi.html';
+            } catch (e) { alert('Bir hata oluştu: ' + e.message); }
+        }
+        function startDrawing(e) { isDrawing = true; signatureCtx.beginPath(); const r = signatureCanvas.getBoundingClientRect(); signatureCtx.moveTo(e.clientX - r.left, e.clientY - r.top); }
+        function draw(e) { if (!isDrawing) return; const r = signatureCanvas.getBoundingClientRect(); signatureCtx.lineTo(e.clientX - r.left, e.clientY - r.top); signatureCtx.stroke(); }
+        function stopDrawing() { isDrawing = false; }
+
+        loadAudit();
+    </script>
+</body>
+
+</html>

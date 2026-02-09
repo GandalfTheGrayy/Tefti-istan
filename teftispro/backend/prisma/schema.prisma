@@ -1,0 +1,237 @@
+// TeftişPro - Prisma Schema
+// Teftiş ve Kalite Kontrol Uygulaması Veritabanı Şeması
+
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "sqlite"
+  url      = "file:./dev.db"
+}
+
+// Rol Modeli
+model Role {
+  id    Int    @id @default(autoincrement())
+  name  String @unique // admin, planlamacı, field, gözden_geçiren, firma_sahibi
+  users User[]
+}
+
+// Kullanıcı Modeli
+model User {
+  id           Int      @id @default(autoincrement())
+  email        String   @unique
+  password     String   // bcrypt ile hashlenmiş
+  roleId       Int
+  role         Role     @relation(fields: [roleId], references: [id])
+  
+  // Profil bilgileri
+  profilePhoto String?  // Profil fotoğrafı URL
+  signatureUrl String?  // Önceden tanımlı imza URL
+  
+  // Müşteri bağlantısı
+  companyId    Int?     // Hangi şirkete ait
+  branchId     Int?     // Hangi şubeye ait
+  
+  createdAt    DateTime @default(now())
+  
+  // İlişkiler
+  audits            Audit[]            @relation("AuditorRelation")
+  reviews           Audit[]            @relation("ReviewerRelation")
+  branchAssignments BranchAssignment[]
+  ownedCompanies    Company[]          @relation("CompanyOwner")
+  notifications     Notification[]
+}
+
+// Şirket Modeli
+model Company {
+  id        Int      @id @default(autoincrement())
+  name      String   @unique
+  logoUrl   String?
+  createdAt DateTime @default(now())
+  
+  // Şirket sahibi
+  ownerId   Int?
+  owner     User?    @relation("CompanyOwner", fields: [ownerId], references: [id])
+  
+  // İlişkiler
+  branches  Branch[]
+  audits    Audit[]
+  regions   Region[]
+  questions Question[]  // Şirkete özel sorular
+}
+
+// Bölge Modeli
+model Region {
+  id        Int      @id @default(autoincrement())
+  name      String
+  companyId Int
+  company   Company  @relation(fields: [companyId], references: [id], onDelete: Cascade)
+  branches  Branch[]
+  
+  @@unique([name, companyId])
+}
+
+// Şube Modeli
+model Branch {
+  id          Int                @id @default(autoincrement())
+  name        String
+  city        String
+  address     String?
+  phone       String?
+  email       String?
+  isActive    Boolean            @default(true)
+  companyId   Int
+  company     Company            @relation(fields: [companyId], references: [id], onDelete: Cascade)
+  regionId    Int?
+  region      Region?            @relation(fields: [regionId], references: [id])
+  createdAt   DateTime           @default(now())
+  
+  audits      Audit[]
+  assignments BranchAssignment[]
+}
+
+// Kategori Modeli
+model Category {
+  id        Int        @id @default(autoincrement())
+  title     String     @unique // Örn: "Genel Temizlik", "Yangın Güvenliği"
+  createdAt DateTime   @default(now())
+  questions Question[]
+}
+
+// Soru Modeli
+model Question {
+  id           Int       @id @default(autoincrement())
+  text         String    // Soru metni
+  description  String?   // Detaylı açıklama
+  points       Int       @default(5)     // Puan değeri
+  noteRequired Boolean   @default(false) // Açıklama zorunlu mu?
+  imageUrl     String?   // Soru görseli
+  categoryId   Int
+  category     Category  @relation(fields: [categoryId], references: [id], onDelete: Cascade)
+  companyId    Int?      // null = genel soru, değilse şirkete özel
+  company      Company?  @relation(fields: [companyId], references: [id])
+  createdAt    DateTime  @default(now())
+  // Koşullu soru desteği
+  parentQuestionId Int?      // Bağlı olduğu üst soru
+  triggerValue     String?   // Hangi cevap değerinde gösterilsin (U, UD, YP)
+  parentQuestion   Question? @relation("QuestionHierarchy", fields: [parentQuestionId], references: [id])
+  childQuestions   Question[] @relation("QuestionHierarchy")
+  
+  answers           Answer[]
+  photos            Photo[]
+  correctiveActions CorrectiveAction[]
+}
+
+// Denetim Modeli
+model Audit {
+  id                 Int       @id @default(autoincrement())
+  userId             Int       // Atanan Denetçi
+  user               User      @relation("AuditorRelation", fields: [userId], references: [id])
+  reviewerId         Int?      // Onaylayan
+  reviewer           User?     @relation("ReviewerRelation", fields: [reviewerId], references: [id])
+  assignedById       Int?      // Atayan kişi (planlamacı/admin)
+  
+  // Durumlar: pending (atandı bekliyor), draft (başlandı), submitted, approved, rejected, revision_requested
+  status             String    @default("pending")
+  scheduledDate      DateTime? // Planlanan denetim tarihi
+  createdAt          DateTime  @default(now())
+  updatedAt          DateTime  @updatedAt
+  deletedAt          DateTime? // Soft delete
+  
+  companyId          Int?
+  company            Company?  @relation(fields: [companyId], references: [id])
+  branchId           Int?
+  branch             Branch?   @relation(fields: [branchId], references: [id])
+  
+  // Denetim döngüsü
+  nextAuditDate      DateTime?
+  
+  // Rapor bilgileri
+  title              String?   // Denetim başlığı
+  authorizedPerson   String?   // Yetkili kişi adı
+  clientSignatureUrl String?   // Karşı taraf imza URL
+  auditorSignatureUrl String?  // Denetçi imza URL
+  revisionNote       String?   // Revizyon talebi notu
+  // GPS Konum
+  latitude           Float?
+  longitude          Float?
+  
+  answers            Answer[]
+  photos             Photo[]
+  correctiveActions  CorrectiveAction[]
+}
+
+// Cevap Modeli
+model Answer {
+  id         Int      @id @default(autoincrement())
+  auditId    Int
+  questionId Int
+  value      String   // U (Uygun), YP (Yarı Puanlı), UD (Uygun Değil), DD (Değerlendirme Dışı)
+  note       String?  // Açıklama/not
+  createdAt  DateTime @default(now())
+  
+  audit      Audit    @relation(fields: [auditId], references: [id], onDelete: Cascade)
+  question   Question @relation(fields: [questionId], references: [id], onDelete: Cascade)
+  
+  @@unique([auditId, questionId], name: "auditId_questionId")
+}
+
+// Fotoğraf Modeli
+model Photo {
+  id         Int       @id @default(autoincrement())
+  auditId    Int
+  questionId Int?      // null ise imza fotoğrafı
+  url        String
+  latitude   Float?    // GPS konum
+  longitude  Float?
+  createdAt  DateTime  @default(now())
+  
+  audit      Audit     @relation(fields: [auditId], references: [id], onDelete: Cascade)
+  question   Question? @relation(fields: [questionId], references: [id])
+}
+
+// Şube Ataması Modeli
+model BranchAssignment {
+  id        Int      @id @default(autoincrement())
+  branchId  Int
+  userId    Int      // Denetçi
+  createdAt DateTime @default(now())
+  
+  branch    Branch   @relation(fields: [branchId], references: [id], onDelete: Cascade)
+  user      User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+  
+  @@unique([branchId, userId])
+}
+
+// Bildirim Modeli
+model Notification {
+  id        Int      @id @default(autoincrement())
+  userId    Int
+  title     String
+  message   String
+  type      String   // audit_assigned, audit_approved, audit_rejected, audit_submitted
+  read      Boolean  @default(false)
+  auditId   Int?
+  createdAt DateTime @default(now())
+  
+  user      User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+}
+
+// Düzeltici Faaliyet Modeli
+model CorrectiveAction {
+  id          Int       @id @default(autoincrement())
+  auditId     Int
+  questionId  Int
+  answerId    Int?
+  description String
+  assignedTo  Int?      // Sorumlu kişi
+  dueDate     DateTime?
+  status      String    @default("open") // open, in_progress, closed
+  closedAt    DateTime?
+  closedNote  String?
+  createdAt   DateTime  @default(now())
+  
+  audit       Audit     @relation(fields: [auditId], references: [id], onDelete: Cascade)
+  question    Question  @relation(fields: [questionId], references: [id])
+}

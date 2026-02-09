@@ -1,0 +1,342 @@
+<!DOCTYPE html>
+<html lang="tr">
+
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Denetim İnceleme - TeftişPro</title>
+    <meta name="description" content="Denetim detaylarını inceleyin">
+    <link rel="preconnect" href="https://fonts.googleapis.com">
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700&display=swap" rel="stylesheet">
+    <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Material+Symbols+Outlined:opsz,wght,FILL,GRAD@24,400,0,0" />
+    <script src="https://cdn.tailwindcss.com"></script>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/jspdf/2.5.1/jspdf.umd.min.js"></script>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/jspdf-autotable/3.8.2/jspdf.plugin.autotable.min.js"></script>
+    <link rel="stylesheet" href="/public/styles.css">
+    <script src="/public/layout.js"></script>
+</head>
+
+<body data-custom-header>
+    <main>
+        <!-- Inline Header -->
+        <div class="sticky top-0 z-30 backdrop-blur-md" style="background:var(--bg-header);border-bottom:1px solid var(--border-color);" id="pageHeader">
+            <div class="flex items-center justify-between px-4 lg:px-8 py-3">
+                <div class="flex items-center gap-4">
+                    <a href="/public/denetim_listesi.html" class="tp-btn-ghost"><span class="material-symbols-outlined">arrow_back</span></a>
+                    <div>
+                        <h1 id="auditTitle" class="text-lg font-semibold" style="color:var(--text-primary);">Denetim İnceleme</h1>
+                        <p id="auditInfo" class="text-sm" style="color:var(--text-muted);">Yükleniyor...</p>
+                    </div>
+                </div>
+                <div class="flex items-center gap-2">
+                    <button onclick="downloadPDF('general')" title="Genel Rapor PDF" class="tp-btn tp-btn-secondary py-2 px-3"><span class="material-symbols-outlined">picture_as_pdf</span></button>
+                    <button onclick="downloadPDF('nonconformity')" title="Uygunsuzluk Raporu" class="tp-btn tp-btn-danger py-2 px-3"><span class="material-symbols-outlined">warning</span></button>
+                    <button onclick="openShareModal()" class="tp-btn tp-btn-secondary py-2 px-3"><span class="material-symbols-outlined">share</span></button>
+                    <div id="reviewActions" class="hidden flex gap-2">
+                        <button onclick="reviewAudit('reject')" class="tp-btn tp-btn-danger"><span class="material-symbols-outlined">close</span><span class="hidden sm:inline">Reddet</span></button>
+                        <button onclick="reviewAudit('approve')" class="tp-btn tp-btn-primary"><span class="material-symbols-outlined">check</span><span class="hidden sm:inline">Onayla</span></button>
+                    </div>
+                </div>
+            </div>
+        </div>
+
+        <div class="max-w-6xl mx-auto p-4 lg:p-8 tp-animate-in">
+            <!-- Summary Cards -->
+            <div class="grid grid-cols-1 lg:grid-cols-3 gap-6 mb-8">
+                <div class="tp-card rounded-2xl p-6 flex items-center gap-6">
+                    <div class="relative">
+                        <svg class="progress-ring w-24 h-24" viewBox="0 0 100 100">
+                            <circle stroke="var(--border-color)" stroke-width="8" fill="transparent" r="42" cx="50" cy="50" />
+                            <circle id="progressCircle" class="progress-ring__circle" stroke-width="8" fill="transparent" r="42" cx="50" cy="50" stroke-linecap="round" stroke-dasharray="264" stroke-dashoffset="264" />
+                        </svg>
+                        <div class="absolute inset-0 flex items-center justify-center">
+                            <span id="scorePercent" class="text-2xl font-bold" style="color:var(--text-primary);">0%</span>
+                        </div>
+                    </div>
+                    <div>
+                        <p class="text-sm" style="color:var(--text-muted);">Genel Puan</p>
+                        <p style="color:var(--text-primary);"><span id="earnedPoints">0</span> / <span id="totalPoints">0</span> puan</p>
+                    </div>
+                </div>
+                <div class="tp-card rounded-2xl p-6">
+                    <div class="flex items-center gap-4 mb-4">
+                        <div class="tp-stat-icon tp-icon-green"><span class="material-symbols-outlined">person</span></div>
+                        <div><p class="text-sm" style="color:var(--text-muted);">Denetçi</p><p id="auditorName" class="font-medium" style="color:var(--text-primary);">-</p></div>
+                    </div>
+                    <div class="flex items-center gap-4">
+                        <div class="tp-stat-icon tp-icon-blue"><span class="material-symbols-outlined">calendar_today</span></div>
+                        <div><p class="text-sm" style="color:var(--text-muted);">Tarih</p><p id="auditDate" class="font-medium" style="color:var(--text-primary);">-</p></div>
+                    </div>
+                </div>
+                <div class="tp-card rounded-2xl p-6">
+                    <div class="flex items-center justify-between mb-4">
+                        <p class="text-sm" style="color:var(--text-muted);">Durum</p>
+                        <span id="statusBadge" class="tp-badge tp-badge-draft">Taslak</span>
+                    </div>
+                    <div id="revisionNote" class="hidden mt-4 p-3 rounded-lg" style="background:rgba(245,158,11,0.08);border:1px solid rgba(245,158,11,0.2);">
+                        <p class="text-sm font-medium" style="color:#f59e0b;">Revizyon Notu:</p>
+                        <p id="revisionNoteText" class="text-sm mt-1" style="color:var(--text-secondary);"></p>
+                    </div>
+                    <div id="signatureSection" class="hidden mt-4">
+                        <p class="text-sm mb-2" style="color:var(--text-muted);">İmza</p>
+                        <img id="signatureImg" class="w-full h-20 object-contain bg-white rounded-lg">
+                    </div>
+                </div>
+            </div>
+
+            <!-- Tabs -->
+            <div class="flex gap-6 mb-6" style="border-bottom:1px solid var(--border-color);">
+                <button onclick="switchTab('all')" class="tp-tab active" data-tab="all">Tüm Cevaplar</button>
+                <button onclick="switchTab('issues')" class="tp-tab" data-tab="issues">Sorunlar</button>
+                <button onclick="switchTab('photos')" class="tp-tab" data-tab="photos">Fotoğraflar</button>
+                <button onclick="switchTab('categories')" class="tp-tab" data-tab="categories">Kategoriler</button>
+            </div>
+
+            <div id="tabAll" class="tab-content space-y-4"></div>
+            <div id="tabIssues" class="tab-content hidden space-y-4"></div>
+            <div id="tabPhotos" class="tab-content hidden">
+                <div id="photosGrid" class="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-4 gap-4"></div>
+                <div id="noPhotos" class="hidden tp-empty-state"><span class="material-symbols-outlined">photo_library</span><p>Fotoğraf bulunmuyor</p></div>
+            </div>
+            <div id="tabCategories" class="tab-content hidden space-y-4"></div>
+
+            <div id="loadingState" class="text-center py-12"><div class="tp-spinner mx-auto"></div><p class="mt-4" style="color:var(--text-muted);">Yükleniyor...</p></div>
+        </div>
+    </main>
+
+    <!-- Share Modal -->
+    <div id="shareModal" class="tp-modal-overlay">
+        <div class="tp-modal max-w-md">
+            <div class="tp-modal-header"><h3 class="tp-modal-title">Paylaş</h3><button onclick="closeShareModal()" class="tp-btn-ghost"><span class="material-symbols-outlined">close</span></button></div>
+            <div class="space-y-3">
+                <button onclick="shareWhatsApp()" class="w-full flex items-center gap-4 p-4 rounded-xl transition-colors" style="background:var(--bg-input);" onmouseover="this.style.background='var(--bg-hover)'" onmouseout="this.style.background='var(--bg-input)'">
+                    <div class="w-10 h-10 rounded-full bg-green-500 flex items-center justify-center"><span class="material-symbols-outlined text-white">chat</span></div><span style="color:var(--text-primary);">WhatsApp</span>
+                </button>
+                <button onclick="shareEmail()" class="w-full flex items-center gap-4 p-4 rounded-xl transition-colors" style="background:var(--bg-input);" onmouseover="this.style.background='var(--bg-hover)'" onmouseout="this.style.background='var(--bg-input)'">
+                    <div class="w-10 h-10 rounded-full bg-blue-500 flex items-center justify-center"><span class="material-symbols-outlined text-white">email</span></div><span style="color:var(--text-primary);">E-posta</span>
+                </button>
+                <button onclick="copyLink()" class="w-full flex items-center gap-4 p-4 rounded-xl transition-colors" style="background:var(--bg-input);" onmouseover="this.style.background='var(--bg-hover)'" onmouseout="this.style.background='var(--bg-input)'">
+                    <div class="w-10 h-10 rounded-full bg-purple-500 flex items-center justify-center"><span class="material-symbols-outlined text-white">link</span></div><span style="color:var(--text-primary);">Link Kopyala</span>
+                </button>
+            </div>
+        </div>
+    </div>
+
+    <!-- Report Signature Modal -->
+    <div id="reportSignModal" class="tp-modal-overlay">
+        <div class="tp-modal max-w-lg">
+            <h3 class="tp-modal-title mb-2">Uygunsuzluk Raporu İmzası</h3>
+            <p class="text-sm mb-4" style="color:var(--text-muted);">Raporu oluşturmadan önce lütfen karşı taraf imzasını alın.</p>
+            <div class="bg-white rounded-xl p-2 mb-4"><canvas id="reportSignCanvas" class="w-full h-48 cursor-crosshair touch-none"></canvas></div>
+            <div class="flex gap-3">
+                <button onclick="clearReportSign()" class="flex-1 tp-btn tp-btn-secondary">Temizle</button>
+                <button onclick="generateReportWithSign()" class="flex-1 tp-btn tp-btn-primary">Raporu Oluştur</button>
+            </div>
+        </div>
+    </div>
+
+    <!-- Review Modal -->
+    <div id="reviewModal" class="tp-modal-overlay">
+        <div class="tp-modal max-w-md">
+            <h3 id="reviewModalTitle" class="tp-modal-title mb-4">Denetimi Onayla</h3>
+            <textarea id="reviewNote" placeholder="Not ekleyin (opsiyonel)..." class="tp-input tp-textarea" rows="3"></textarea>
+            <div class="flex gap-3 mt-4">
+                <button onclick="closeReviewModal()" class="flex-1 tp-btn tp-btn-secondary">İptal</button>
+                <button onclick="confirmReview()" id="confirmReviewBtn" class="flex-1 tp-btn tp-btn-primary">Onayla</button>
+            </div>
+        </div>
+    </div>
+
+    <script>
+        const API_URL = 'http://localhost:8080';
+        const token = localStorage.getItem('token');
+        const user = JSON.parse(localStorage.getItem('user') || '{}');
+        const userRole = typeof user.role === 'object' ? user.role.name : user.role;
+        if (!token) window.location.href = '/public/login.html';
+        const urlParams = new URLSearchParams(window.location.search);
+        const auditId = urlParams.get('id');
+        if (!auditId) window.location.href = '/public/denetim_listesi.html';
+
+        let audit = null, score = null, categories = [], reviewAction = null;
+
+        async function loadAudit() {
+            try {
+                const [auditRes, catRes] = await Promise.all([
+                    fetch(`${API_URL}/audits/${auditId}`, { headers: { 'Authorization': `Bearer ${token}` } }),
+                    fetch(`${API_URL}/categories`, { headers: { 'Authorization': `Bearer ${token}` } })
+                ]);
+                if (!auditRes.ok) throw new Error('Denetim bulunamadı');
+                const data = await auditRes.json();
+                audit = data.audit; score = data.score; categories = await catRes.json();
+                renderAudit();
+                document.getElementById('loadingState').classList.add('hidden');
+            } catch (e) { console.error(e); alert('Denetim yüklenemedi'); window.location.href = '/public/denetim_listesi.html'; }
+        }
+
+        function renderAudit() {
+            document.getElementById('auditTitle').textContent = audit.title || `Denetim #${audit.id}`;
+            document.getElementById('auditInfo').textContent = audit.branch ? `${audit.branch.name} - ${audit.branch.company?.name || ''}` : '';
+            document.getElementById('scorePercent').textContent = score.percent + '%';
+            document.getElementById('earnedPoints').textContent = Math.round(score.earnedPoints);
+            document.getElementById('totalPoints').textContent = score.totalPoints;
+            const circle = document.getElementById('progressCircle');
+            const offset = 264 - (score.percent / 100) * 264;
+            circle.style.strokeDashoffset = offset;
+            document.getElementById('auditorName').textContent = audit.user?.email?.split('@')[0] || '-';
+            document.getElementById('auditDate').textContent = new Date(audit.createdAt).toLocaleDateString('tr-TR');
+            const sb = document.getElementById('statusBadge'); sb.className = `tp-badge tp-badge-${audit.status}`; sb.textContent = getStatusName(audit.status);
+            if (audit.revisionNote) { document.getElementById('revisionNote').classList.remove('hidden'); document.getElementById('revisionNoteText').textContent = audit.revisionNote; }
+            if (audit.auditorSignatureUrl) { document.getElementById('signatureSection').classList.remove('hidden'); document.getElementById('signatureImg').src = API_URL + audit.auditorSignatureUrl; }
+            if (['admin', 'gözden_geçiren', 'planlamacı'].includes(userRole) && audit.status === 'submitted') { document.getElementById('reviewActions').classList.remove('hidden'); document.getElementById('reviewActions').classList.add('flex'); }
+            renderAllAnswers(); renderIssues(); renderPhotos(); renderCategories();
+        }
+
+        function getStatusName(s) { return { 'draft': 'Taslak', 'submitted': 'Gönderildi', 'approved': 'Onaylandı', 'rejected': 'Reddedildi', 'revision_requested': 'Revizyon' }[s] || s; }
+        function getAnswerLabel(v) { return { 'U': 'Uygun', 'YP': 'Yarı Puanlı', 'UD': 'Uygun Değil', 'DD': 'Değ. Dışı' }[v] || v; }
+
+        function renderAllAnswers() {
+            const container = document.getElementById('tabAll');
+            const answerMap = new Map(audit.answers.map(a => [a.questionId, a]));
+            container.innerHTML = categories.map(cat => `
+                <div class="tp-card rounded-2xl overflow-hidden">
+                    <div class="p-4 flex items-center justify-between" style="border-bottom:1px solid var(--border-color);">
+                        <h3 class="font-semibold" style="color:var(--text-primary);">${cat.title}</h3>
+                        <span class="text-sm" style="color:var(--text-muted);">${getCategoryScore(cat.id)}</span>
+                    </div>
+                    <div>${cat.questions.map(q => {
+                        const a = answerMap.get(q.id);
+                        return `<div class="p-4 flex items-start gap-4" style="border-bottom:1px solid var(--border-color);">
+                            <span class="tp-answer-${a?.value || 'DD'} px-2 py-1 rounded text-xs font-medium">${getAnswerLabel(a?.value || 'DD')}</span>
+                            <div class="flex-1"><p style="color:var(--text-primary);">${q.text}</p>${a?.note ? `<p class="text-sm mt-1" style="color:var(--text-muted);">${a.note}</p>` : ''}</div>
+                            <span class="text-sm" style="color:var(--text-muted);">${q.points}p</span>
+                        </div>`;
+                    }).join('')}</div>
+                </div>
+            `).join('');
+        }
+
+        function renderIssues() {
+            const container = document.getElementById('tabIssues');
+            const issues = audit.answers.filter(a => a.value === 'UD' || a.value === 'YP');
+            if (issues.length === 0) { container.innerHTML = `<div class="tp-empty-state"><span class="material-symbols-outlined">check_circle</span><p>Sorun bulunmuyor</p></div>`; return; }
+            container.innerHTML = issues.map(a => `
+                <div class="tp-card rounded-2xl p-4 flex items-start gap-4">
+                    <span class="tp-answer-${a.value} px-2 py-1 rounded text-xs font-medium">${getAnswerLabel(a.value)}</span>
+                    <div class="flex-1"><p style="color:var(--text-primary);">${a.question?.text || ''}</p>${a.note ? `<p class="text-sm mt-1" style="color:var(--text-muted);">${a.note}</p>` : ''}<p class="text-xs mt-2" style="color:var(--text-muted);">${a.question?.category?.title || ''}</p></div>
+                </div>
+            `).join('');
+        }
+
+        function renderPhotos() {
+            const grid = document.getElementById('photosGrid'), noPhotos = document.getElementById('noPhotos');
+            if (!audit.photos || audit.photos.length === 0) { grid.classList.add('hidden'); noPhotos.classList.remove('hidden'); return; }
+            noPhotos.classList.add('hidden');
+            grid.innerHTML = audit.photos.map(p => `<div class="aspect-square rounded-xl overflow-hidden" style="background:var(--bg-input);"><img src="${API_URL}${p.url}" class="w-full h-full object-cover cursor-pointer hover:opacity-80 transition-opacity" onclick="window.open('${API_URL}${p.url}','_blank')"></div>`).join('');
+        }
+
+        function renderCategories() {
+            document.getElementById('tabCategories').innerHTML = score.byCategory.map(cat => `
+                <div class="tp-card rounded-2xl p-4 flex items-center gap-4">
+                    <div class="flex-1">
+                        <p class="font-medium" style="color:var(--text-primary);">${cat.title}</p>
+                        <div class="flex items-center gap-3 mt-2">
+                            <div class="flex-1 h-2 rounded-full overflow-hidden" style="background:var(--bg-input);"><div class="h-full rounded-full" style="background:var(--color-accent);width:${cat.percent}%"></div></div>
+                            <span class="text-sm w-12" style="color:var(--text-muted);">${cat.percent}%</span>
+                        </div>
+                    </div>
+                    <div class="text-right"><p class="text-2xl font-bold" style="color:var(--text-primary);">${Math.round(cat.earnedPoints)}</p><p class="text-sm" style="color:var(--text-muted);">/ ${cat.totalPoints}</p></div>
+                </div>
+            `).join('');
+        }
+
+        function getCategoryScore(cid) { const c = score.byCategory.find(x => x.categoryId === cid); return c ? `${c.percent}%` : '-'; }
+
+        function switchTab(tab) {
+            document.querySelectorAll('.tp-tab').forEach(b => b.classList.toggle('active', b.dataset.tab === tab));
+            document.querySelectorAll('.tab-content').forEach(c => c.classList.add('hidden'));
+            document.getElementById('tab' + tab.charAt(0).toUpperCase() + tab.slice(1)).classList.remove('hidden');
+        }
+
+        function openShareModal() { document.getElementById('shareModal').classList.add('active'); }
+        function closeShareModal() { document.getElementById('shareModal').classList.remove('active'); }
+        function shareWhatsApp() { window.open(`https://wa.me/?text=${encodeURIComponent(`TeftişPro Denetim Raporu: ${audit.title || 'Denetim #' + audit.id} - Puan: ${score.percent}%\n${window.location.href}`)}`, '_blank'); }
+        function shareEmail() { window.open(`mailto:?subject=${encodeURIComponent(`TeftişPro Denetim Raporu: ${audit.title || 'Denetim #' + audit.id}`)}&body=${encodeURIComponent(`Denetim puanı: ${score.percent}%\n\nDetaylar: ${window.location.href}`)}`); }
+        function copyLink() { navigator.clipboard.writeText(window.location.href); if (window.showToast) showToast('Link kopyalandı!', 'success'); closeShareModal(); }
+
+        function reviewAudit(action) {
+            reviewAction = action;
+            document.getElementById('reviewModalTitle').textContent = action === 'approve' ? 'Denetimi Onayla' : 'Denetimi Reddet';
+            const btn = document.getElementById('confirmReviewBtn');
+            btn.textContent = action === 'approve' ? 'Onayla' : 'Reddet';
+            btn.className = action === 'approve' ? 'flex-1 tp-btn tp-btn-primary' : 'flex-1 tp-btn' ;
+            if (action !== 'approve') { btn.style.background = '#ef4444'; btn.style.color = '#fff'; }
+            document.getElementById('reviewModal').classList.add('active');
+        }
+        function closeReviewModal() { document.getElementById('reviewModal').classList.remove('active'); reviewAction = null; }
+        async function confirmReview() {
+            const note = document.getElementById('reviewNote').value;
+            try { await fetch(`${API_URL}/audits/${auditId}/review`, { method: 'POST', headers: { 'Authorization': `Bearer ${token}`, 'Content-Type': 'application/json' }, body: JSON.stringify({ action: reviewAction, note }) }); alert(reviewAction === 'approve' ? 'Denetim onaylandı!' : 'Revizyon talebi gönderildi!'); window.location.reload(); } catch (e) { alert('İşlem başarısız'); }
+        }
+
+        let rSignCanvas, rSignCtx, rSignDrawing = false;
+        function initReportSignCanvas() {
+            rSignCanvas = document.getElementById('reportSignCanvas'); rSignCtx = rSignCanvas.getContext('2d');
+            rSignCtx.clearRect(0, 0, rSignCanvas.width, rSignCanvas.height);
+            rSignCanvas.width = rSignCanvas.offsetWidth; rSignCanvas.height = rSignCanvas.offsetHeight;
+            rSignCtx.strokeStyle = '#000'; rSignCtx.lineWidth = 2; rSignCtx.lineCap = 'round';
+            rSignCanvas.onmousedown = (e) => { rSignDrawing = true; rSignCtx.beginPath(); const r = rSignCanvas.getBoundingClientRect(); rSignCtx.moveTo(e.clientX - r.left, e.clientY - r.top); };
+            rSignCanvas.onmousemove = (e) => { if (!rSignDrawing) return; const r = rSignCanvas.getBoundingClientRect(); rSignCtx.lineTo(e.clientX - r.left, e.clientY - r.top); rSignCtx.stroke(); };
+            rSignCanvas.onmouseup = () => rSignDrawing = false;
+            rSignCanvas.onmouseleave = () => rSignDrawing = false;
+            rSignCanvas.ontouchstart = (e) => { e.preventDefault(); rSignCanvas.onmousedown(e.touches[0]); };
+            rSignCanvas.ontouchmove = (e) => { e.preventDefault(); rSignCanvas.onmousemove(e.touches[0]); };
+            rSignCanvas.ontouchend = () => rSignDrawing = false;
+        }
+        function clearReportSign() { rSignCtx.clearRect(0, 0, rSignCanvas.width, rSignCanvas.height); }
+        function downloadPDF(type) {
+            if (type === 'nonconformity') { document.getElementById('reportSignModal').classList.add('active'); setTimeout(initReportSignCanvas, 100); }
+            else generatePDF(type, null);
+        }
+        function generateReportWithSign() { generatePDF('nonconformity', rSignCanvas.toDataURL('image/png')); document.getElementById('reportSignModal').classList.remove('active'); }
+
+        function generatePDF(type, extraSignature) {
+            const { jsPDF } = window.jspdf; const doc = new jsPDF('p', 'mm', 'a4');
+            const turkishMap = { 'ı': 'i', 'İ': 'I', 'ğ': 'g', 'Ğ': 'G', 'ü': 'u', 'Ü': 'U', 'ş': 's', 'Ş': 'S', 'ö': 'o', 'Ö': 'O', 'ç': 'c', 'Ç': 'C' };
+            const ct = (t) => !t ? '' : t.replace(/[ıİğĞüÜşŞöÖçÇ]/g, c => turkishMap[c] || c);
+            const pw = 210, m = 15;
+            doc.setFillColor(245, 247, 250); doc.rect(0, 0, pw, 40, 'F');
+            doc.setFontSize(22); doc.setTextColor(16, 185, 129); doc.text('TeftisPro', m, 25);
+            doc.setFontSize(16); doc.setTextColor(55, 65, 81);
+            doc.text(type === 'nonconformity' ? 'UYGUNSUZLUK RAPORU' : 'DENETIM RAPORU', pw - m, 25, { align: 'right' });
+            const infoData = [
+                ['Sirket', ct(audit.branch?.company?.name || '-'), 'Tarih', new Date(audit.createdAt).toLocaleDateString('tr-TR')],
+                ['Sube', ct(audit.branch?.name || '-'), 'Durum', ct(getStatusName(audit.status))],
+                ['Denetci', ct(audit.user?.email?.split('@')[0] || '-'), 'Puan', score.percent + '%']
+            ];
+            doc.autoTable({ startY: 45, margin: { left: m, right: m }, head: [], body: infoData, theme: 'plain', styles: { fontSize: 10, cellPadding: 2 }, columnStyles: { 0: { fontStyle: 'bold', textColor: [100, 116, 139], cellWidth: 25 }, 1: { fontStyle: 'bold', textColor: [15, 23, 42] }, 2: { fontStyle: 'bold', textColor: [100, 116, 139], cellWidth: 25 }, 3: { fontStyle: 'bold', textColor: [15, 23, 42] } } });
+            const answers = type === 'nonconformity' ? audit.answers.filter(a => a.value === 'UD') : audit.answers;
+            if (answers.length === 0) { doc.setFontSize(14); doc.setTextColor(16, 185, 129); doc.text('Uygunsuzluk bulunmamaktadir!', pw / 2, 100, { align: 'center' }); }
+            else {
+                const tb = []; let cc = '';
+                answers.forEach(a => { const cn = ct(a.question?.category?.title || '-'); if (cn !== cc) { tb.push([{ content: cn, colSpan: 3, styles: { fillColor: [241, 245, 249], fontStyle: 'bold', textColor: [51, 65, 85] } }]); cc = cn; }
+                    tb.push([ct(a.question?.text || '') + (a.note ? '\nNot: ' + ct(a.note) : ''), { U: 'UYGUN', YP: 'YARIM', UD: 'UYGUN DEGIL', DD: 'KAPSAM DISI' }[a.value] || a.value, a.question?.points + 'p']); });
+                doc.autoTable({ startY: doc.lastAutoTable.finalY + 10, margin: { left: m, right: m }, head: [['Soru / Detay', 'Durum', 'Puan']], body: tb, theme: 'grid', headStyles: { fillColor: [16, 34, 22], textColor: [255, 255, 255] }, styles: { fontSize: 9, cellPadding: 4, valign: 'middle' }, columnStyles: { 0: { cellWidth: 'auto' }, 1: { cellWidth: 30, halign: 'center', fontStyle: 'bold' }, 2: { cellWidth: 15, halign: 'center' } }, didParseCell: function (d) { if (d.section === 'body' && d.column.index === 1) { const v = d.cell.raw; if (v === 'UYGUN') d.cell.styles.textColor = [22, 163, 74]; if (v === 'UYGUN DEGIL') d.cell.styles.textColor = [220, 38, 38]; if (v === 'YARIM') d.cell.styles.textColor = [202, 138, 4]; } } });
+            }
+            let fy = doc.lastAutoTable ? doc.lastAutoTable.finalY + 20 : 120;
+            if (fy > 250) { doc.addPage(); fy = 40; }
+            doc.setDrawColor(209, 213, 219); doc.line(m, fy, pw - m, fy);
+            doc.setFontSize(10); doc.setTextColor(107, 114, 128); doc.text('Denetci Imzasi', m, fy + 10); doc.text('Karsi Taraf Imzasi', pw / 2 + 20, fy + 10);
+            if (audit.auditorSignatureUrl) { try { const img = new Image(); img.src = API_URL + audit.auditorSignatureUrl; doc.addImage(img, 'PNG', m, fy + 15, 40, 20); } catch (e) {} }
+            if (extraSignature) doc.addImage(extraSignature, 'PNG', pw / 2 + 20, fy + 15, 40, 20);
+            else if (audit.clientSignatureUrl) { try { const img = new Image(); img.src = API_URL + audit.clientSignatureUrl; doc.addImage(img, 'PNG', pw / 2 + 20, fy + 15, 40, 20); } catch (e) {} }
+            const pc = doc.internal.getNumberOfPages();
+            for (let i = 1; i <= pc; i++) { doc.setPage(i); doc.setFontSize(8); doc.setTextColor(156, 163, 175); doc.text(`Sayfa ${i} / ${pc} - Olusturulma: ${new Date().toLocaleString('tr-TR')}`, pw / 2, 290, { align: 'center' }); }
+            doc.save(type === 'nonconformity' ? `denetim-${auditId}-uygunsuzluk.pdf` : `denetim-${auditId}-genel.pdf`);
+        }
+
+        loadAudit();
+    </script>
+</body>
+
+</html>

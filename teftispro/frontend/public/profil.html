@@ -1,0 +1,145 @@
+<!DOCTYPE html>
+<html lang="tr">
+
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Profil - TeftişPro</title>
+    <link rel="preconnect" href="https://fonts.googleapis.com">
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700&display=swap" rel="stylesheet">
+    <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Material+Symbols+Outlined:opsz,wght,FILL,GRAD@24,400,0,0" />
+    <script src="https://cdn.tailwindcss.com"></script>
+    <link rel="stylesheet" href="/public/styles.css">
+    <script src="/public/layout.js"></script>
+</head>
+
+<body>
+    <main>
+        <div class="max-w-2xl mx-auto p-4 lg:p-8 tp-animate-in">
+            <h2 class="text-2xl font-bold mb-6" style="color:var(--text-primary);">Profil Ayarları</h2>
+
+            <!-- Profile Photo -->
+            <div class="tp-card rounded-2xl p-6 mb-6">
+                <h3 class="text-lg font-semibold mb-4" style="color:var(--text-primary);">Profil Fotoğrafı</h3>
+                <div class="flex items-center gap-6">
+                    <div class="relative">
+                        <div id="profilePhotoContainer" class="w-24 h-24 rounded-full flex items-center justify-center overflow-hidden" style="background:var(--bg-input);">
+                            <span class="material-symbols-outlined text-4xl" style="color:var(--text-muted);">person</span>
+                        </div>
+                        <input type="file" id="photoInput" accept="image/*" class="hidden" onchange="uploadPhoto()">
+                        <button onclick="document.getElementById('photoInput').click()"
+                            class="absolute -bottom-1 -right-1 w-8 h-8 rounded-full flex items-center justify-center text-white" style="background:var(--color-accent);">
+                            <span class="material-symbols-outlined text-lg">edit</span>
+                        </button>
+                    </div>
+                    <div>
+                        <p class="font-medium" style="color:var(--text-primary);" id="userEmail">Yükleniyor...</p>
+                        <p class="text-sm" style="color:var(--text-muted);" id="userRole"></p>
+                    </div>
+                </div>
+            </div>
+
+            <!-- Password -->
+            <div class="tp-card rounded-2xl p-6 mb-6">
+                <h3 class="text-lg font-semibold mb-4" style="color:var(--text-primary);">Şifre Değiştir</h3>
+                <form id="passwordForm" class="space-y-4">
+                    <div><label class="tp-label">Mevcut Şifre</label><input type="password" id="currentPassword" required class="tp-input" placeholder="••••••••"></div>
+                    <div><label class="tp-label">Yeni Şifre</label><input type="password" id="newPassword" required minlength="6" class="tp-input" placeholder="••••••••"></div>
+                    <div><label class="tp-label">Yeni Şifre (Tekrar)</label><input type="password" id="confirmPassword" required class="tp-input" placeholder="••••••••"></div>
+                    <button type="submit" class="tp-btn tp-btn-primary">Şifreyi Güncelle</button>
+                </form>
+            </div>
+
+            <!-- Signature -->
+            <div class="tp-card rounded-2xl p-6 mb-6">
+                <h3 class="text-lg font-semibold mb-4" style="color:var(--text-primary);">Varsayılan İmza</h3>
+                <p class="text-sm mb-4" style="color:var(--text-muted);">Denetimlerde kullanılacak varsayılan imzanızı oluşturun.</p>
+                <div id="existingSignature" class="hidden mb-4">
+                    <p class="text-sm mb-2" style="color:var(--text-secondary);">Mevcut İmza:</p>
+                    <img id="signaturePreview" class="w-full h-24 object-contain bg-white rounded-lg">
+                </div>
+                <div class="bg-white rounded-xl p-2 mb-4"><canvas id="signatureCanvas" class="w-full h-32 cursor-crosshair"></canvas></div>
+                <div class="flex gap-3">
+                    <button onclick="clearSignature()" class="flex-1 tp-btn tp-btn-secondary">Temizle</button>
+                    <button onclick="saveSignature()" class="flex-1 tp-btn tp-btn-primary">Kaydet</button>
+                </div>
+            </div>
+
+            <!-- Logout -->
+            <button onclick="logoutConfirm()" class="w-full tp-btn tp-btn-danger py-3">
+                <span class="material-symbols-outlined">logout</span> Çıkış Yap
+            </button>
+        </div>
+    </main>
+
+    <script>
+        const API_URL = 'http://localhost:8080';
+        const token = localStorage.getItem('token');
+        const user = JSON.parse(localStorage.getItem('user') || '{}');
+        if (!token) window.location.href = '/public/login.html';
+
+        let signatureCanvas, signatureCtx, isDrawing = false;
+
+        function loadUserInfo() {
+            document.getElementById('userEmail').textContent = user.email || '';
+            const role = typeof user.role === 'object' ? user.role.name : user.role;
+            document.getElementById('userRole').textContent = getRoleDisplayName(role);
+            if (user.profilePhoto) document.getElementById('profilePhotoContainer').innerHTML = `<img src="${API_URL}${user.profilePhoto}" class="w-full h-full object-cover">`;
+            if (user.signatureUrl) { document.getElementById('existingSignature').classList.remove('hidden'); document.getElementById('signaturePreview').src = API_URL + user.signatureUrl; }
+        }
+
+        function getRoleDisplayName(r) { return { 'admin': 'Sistem Yöneticisi', 'planlamacı': 'Planlamacı', 'field': 'Saha Denetçisi', 'gözden_geçiren': 'Gözden Geçiren', 'firma_sahibi': 'Firma Sahibi', 'sube_kullanici': 'Şube Kullanıcı' }[r] || r; }
+
+        async function uploadPhoto() {
+            const file = document.getElementById('photoInput').files[0]; if (!file) return;
+            const fd = new FormData(); fd.append('photo', file);
+            try {
+                const r = await fetch(`${API_URL}/profile/photo`, { method: 'POST', headers: { 'Authorization': `Bearer ${token}` }, body: fd });
+                if (r.ok) { const d = await r.json(); document.getElementById('profilePhotoContainer').innerHTML = `<img src="${API_URL}${d.profilePhoto}" class="w-full h-full object-cover">`; user.profilePhoto = d.profilePhoto; localStorage.setItem('user', JSON.stringify(user)); if (window.showToast) showToast('Profil fotoğrafı güncellendi!', 'success'); }
+                else throw new Error('Upload failed');
+            } catch (e) { alert('Fotoğraf yüklenemedi'); }
+        }
+
+        document.getElementById('passwordForm').addEventListener('submit', async (e) => {
+            e.preventDefault();
+            const cp = document.getElementById('currentPassword').value, np = document.getElementById('newPassword').value, cnp = document.getElementById('confirmPassword').value;
+            if (np !== cnp) { alert('Yeni şifreler eşleşmiyor!'); return; }
+            try {
+                const r = await fetch(`${API_URL}/profile/password`, { method: 'PUT', headers: { 'Authorization': `Bearer ${token}`, 'Content-Type': 'application/json' }, body: JSON.stringify({ currentPassword: cp, newPassword: np }) });
+                if (r.ok) { if (window.showToast) showToast('Şifre başarıyla güncellendi!', 'success'); document.getElementById('passwordForm').reset(); }
+                else { const d = await r.json(); throw new Error(d.error || 'Şifre değiştirilemedi'); }
+            } catch (e) { alert(e.message); }
+        });
+
+        function initSignatureCanvas() {
+            signatureCanvas = document.getElementById('signatureCanvas'); signatureCtx = signatureCanvas.getContext('2d');
+            signatureCanvas.width = signatureCanvas.offsetWidth; signatureCanvas.height = signatureCanvas.offsetHeight;
+            signatureCtx.strokeStyle = '#000'; signatureCtx.lineWidth = 2; signatureCtx.lineCap = 'round';
+            signatureCanvas.addEventListener('mousedown', (e) => { isDrawing = true; signatureCtx.beginPath(); const r = signatureCanvas.getBoundingClientRect(); signatureCtx.moveTo(e.clientX - r.left, e.clientY - r.top); });
+            signatureCanvas.addEventListener('mousemove', (e) => { if (!isDrawing) return; const r = signatureCanvas.getBoundingClientRect(); signatureCtx.lineTo(e.clientX - r.left, e.clientY - r.top); signatureCtx.stroke(); });
+            signatureCanvas.addEventListener('mouseup', () => isDrawing = false);
+            signatureCanvas.addEventListener('mouseleave', () => isDrawing = false);
+            signatureCanvas.addEventListener('touchstart', (e) => { e.preventDefault(); signatureCanvas.dispatchEvent(new MouseEvent('mousedown', { clientX: e.touches[0].clientX, clientY: e.touches[0].clientY })); });
+            signatureCanvas.addEventListener('touchmove', (e) => { e.preventDefault(); signatureCanvas.dispatchEvent(new MouseEvent('mousemove', { clientX: e.touches[0].clientX, clientY: e.touches[0].clientY })); });
+            signatureCanvas.addEventListener('touchend', () => isDrawing = false);
+        }
+
+        function clearSignature() { signatureCtx.clearRect(0, 0, signatureCanvas.width, signatureCanvas.height); }
+
+        async function saveSignature() {
+            const dataUrl = signatureCanvas.toDataURL('image/png');
+            try {
+                const r = await fetch(`${API_URL}/profile/signature`, { method: 'POST', headers: { 'Authorization': `Bearer ${token}`, 'Content-Type': 'application/json' }, body: JSON.stringify({ dataUrl }) });
+                if (r.ok) { const d = await r.json(); document.getElementById('existingSignature').classList.remove('hidden'); document.getElementById('signaturePreview').src = API_URL + d.signatureUrl; user.signatureUrl = d.signatureUrl; localStorage.setItem('user', JSON.stringify(user)); if (window.showToast) showToast('İmza kaydedildi!', 'success'); clearSignature(); }
+            } catch (e) { alert('İmza kaydedilemedi'); }
+        }
+
+        function logoutConfirm() { if (!confirm('Çıkış yapmak istediğinize emin misiniz?')) return; logout(); }
+
+        loadUserInfo();
+        initSignatureCanvas();
+    </script>
+</body>
+
+</html>
