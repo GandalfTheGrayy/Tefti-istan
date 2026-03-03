@@ -1167,6 +1167,100 @@ app.delete('/audits/:id', authenticate, authorize('admin'), async (req, res) => 
   }
 });
 
+// POST /audits/:id/corrective-actions - Şube aksiyon bildirimi gönderme
+app.post('/audits/:id/corrective-actions', authenticate, authorize('sube_kullanici', 'admin'), async (req, res) => {
+  try {
+    const auditId = parseInt(req.params.id);
+    const { actions } = req.body; // [{ questionId, description, photoUrls }]
+
+    if (!Array.isArray(actions) || actions.length === 0) {
+      return res.status(400).json({ error: 'Aksiyon listesi boş olamaz' });
+    }
+
+    const audit = await prisma.audit.findUnique({
+      where: { id: auditId },
+      include: {
+        user: { select: { id: true, email: true } },
+        branch: { include: { company: true } },
+        company: true
+      }
+    });
+
+    if (!audit) {
+      return res.status(404).json({ error: 'Denetim bulunamadı' });
+    }
+
+    // Şube kullanıcısı sadece kendi şubesinin denetimi için aksiyon alabilir
+    if (req.user.role.name === 'sube_kullanici' && audit.branchId !== req.user.branchId) {
+      return res.status(403).json({ error: 'Bu denetime erişim yetkiniz yok' });
+    }
+
+    // CorrectiveAction kayıtlarını oluştur
+    for (const action of actions) {
+      if (!action.description && (!action.photoUrls || action.photoUrls.length === 0)) continue;
+      await prisma.correctiveAction.create({
+        data: {
+          auditId,
+          questionId: action.questionId,
+          description: action.description || '',
+          status: 'in_progress',
+          assignedTo: req.user.id
+        }
+      });
+    }
+
+    // Bildirim gönderilecek kullanıcıları bul:
+    // 1) Denetimi yapan (field)
+    // 2) Admin roller
+    // 3) Planlamacı
+    // 4) Firma sahibi (aynı şirkete bağlı)
+    const notifyUsers = new Set();
+
+    // Denetçiyi ekle
+    if (audit.userId) notifyUsers.add(audit.userId);
+
+    // Admin + Planlamacı + Gözden Geçiren rolleri
+    const staffUsers = await prisma.user.findMany({
+      where: { role: { name: { in: ['admin', 'planlamacı', 'gözden_geçiren'] } } },
+      select: { id: true }
+    });
+    staffUsers.forEach(u => notifyUsers.add(u.id));
+
+    // Firma sahibi (aynı şirkete bağlı)
+    if (audit.branch?.company?.id || audit.companyId) {
+      const companyId = audit.branch?.company?.id || audit.companyId;
+      const firmaUsers = await prisma.user.findMany({
+        where: { role: { name: 'firma_sahibi' }, companyId },
+        select: { id: true }
+      });
+      firmaUsers.forEach(u => notifyUsers.add(u.id));
+    }
+
+    // Kendisine bildirim gönderme
+    notifyUsers.delete(req.user.id);
+
+    const auditTitle = audit.title || `Denetim #${auditId}`;
+    const branchName = audit.branch?.name || '';
+
+    for (const userId of notifyUsers) {
+      await prisma.notification.create({
+        data: {
+          userId,
+          title: 'Aksiyon Raporu Gönderildi',
+          message: `"${auditTitle}" denetimine${branchName ? ' (' + branchName + ')' : ''} şube aksiyonları eklendi. ${actions.length} madde güncellendi.`,
+          type: 'corrective_action',
+          auditId
+        }
+      });
+    }
+
+    res.json({ message: 'Aksiyonlar kaydedildi ve merkeze bildirim gönderildi', count: actions.length });
+  } catch (error) {
+    console.error('Corrective actions error:', error);
+    res.status(500).json({ error: 'Sunucu hatası' });
+  }
+});
+
 // ============ STATS ENDPOINTS ============
 
 // GET /stats/overview - Dashboard istatistikleri

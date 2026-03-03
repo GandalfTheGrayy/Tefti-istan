@@ -12,6 +12,8 @@
     <link rel="stylesheet"
         href="https://fonts.googleapis.com/css2?family=Material+Symbols+Outlined:opsz,wght,FILL,GRAD@24,400,0,0" />
     <script src="https://cdn.tailwindcss.com"></script>
+    <!-- SheetJS (Excel export) -->
+    <script src="https://cdn.sheetjs.com/xlsx-0.20.1/package/dist/xlsx.full.min.js"></script>
     <link rel="stylesheet" href="/public/styles.css">
     <script src="/public/layout.js"></script>
 </head>
@@ -33,8 +35,9 @@
 
             <!-- Filters -->
             <div class="tp-card rounded-2xl p-4 mb-6">
-                <div class="flex flex-wrap gap-4">
-                    <div class="flex-1 min-w-[200px]">
+                <div class="flex flex-wrap gap-3">
+                    <!-- Arama -->
+                    <div class="flex-1 min-w-[180px]">
                         <div class="relative">
                             <span class="material-symbols-outlined absolute left-4 top-1/2 -translate-y-1/2"
                                 style="color:var(--text-muted);">search</span>
@@ -42,16 +45,31 @@
                                 style="padding-left:3rem;">
                         </div>
                     </div>
+                    <!-- Durum Filtresi -->
                     <select id="statusFilter" class="tp-input tp-select" style="width:auto;">
                         <option value="">Tüm Durumlar</option>
+                        <option value="pending">Atandı</option>
                         <option value="draft">Taslak</option>
                         <option value="submitted">Gönderildi</option>
                         <option value="approved">Onaylandı</option>
                         <option value="revision_requested">Revizyon</option>
                     </select>
-                    <button onclick="exportCSV()" class="tp-btn tp-btn-secondary">
-                        <span class="material-symbols-outlined">download</span>
-                        CSV
+                    <!-- Şirket/Kategori Filtresi (admin, planlamacı, gözden_geçiren) -->
+                    <select id="companyFilter" class="hidden tp-input tp-select" style="width:auto;">
+                        <option value="">Tüm Şirketler</option>
+                    </select>
+                    <!-- Denetçi Filtresi (admin, planlamacı, gözden_geçiren) -->
+                    <select id="auditorFilter" class="hidden tp-input tp-select" style="width:auto;">
+                        <option value="">Tüm Denetçiler</option>
+                    </select>
+                    <!-- Şube Filtresi (firma_sahibi) -->
+                    <select id="branchFilter" class="hidden tp-input tp-select" style="width:auto;">
+                        <option value="">Tüm Şubeler</option>
+                    </select>
+                    <!-- Excel Export -->
+                    <button onclick="exportExcel()" class="tp-btn tp-btn-secondary">
+                        <span class="material-symbols-outlined">table_view</span>
+                        Excel
                     </button>
                 </div>
             </div>
@@ -126,6 +144,207 @@
         </div>
     </div>
 
+    <!-- Uygunsuzluk Raporu Modalı (firma_sahibi) -->
+    <div id="uygunsuzlukModal" class="tp-modal-overlay">
+        <div class="tp-modal" style="max-width:680px; max-height:85vh; overflow-y:auto;">
+            <div class="flex items-center justify-between mb-5">
+                <div class="flex items-center gap-3">
+                    <div class="w-10 h-10 rounded-full flex items-center justify-center"
+                        style="background:rgba(239,68,68,0.12);">
+                        <span class="material-symbols-outlined" style="color:#ef4444;">report_problem</span>
+                    </div>
+                    <div>
+                        <h3 class="tp-modal-title">Uygunsuzluk Raporu</h3>
+                        <p class="text-xs" style="color:var(--text-muted);" id="uygunsuzlukAuditTitle"></p>
+                    </div>
+                </div>
+                <button onclick="closeUygunsuzlukModal()" class="tp-btn-ghost">
+                    <span class="material-symbols-outlined">close</span>
+                </button>
+            </div>
+            <div id="uygunsuzlukContent">
+                <div class="p-8 text-center">
+                    <div class="tp-spinner mx-auto"></div>
+                </div>
+            </div>
+            <div class="flex gap-3 mt-5 pt-4" style="border-top:1px solid var(--border-color);">
+                <button onclick="closeUygunsuzlukModal()" class="tp-btn tp-btn-secondary">Kapat</button>
+                <button onclick="printUygunsuzluk()" class="tp-btn tp-btn-primary">
+                    <span class="material-symbols-outlined">print</span>
+                    PDF Olarak Kaydet
+                </button>
+            </div>
+        </div>
+    </div>
+
+    <!-- Aksiyon Al Modalı (sube_kullanici) -->
+    <div id="aksiyonModal" class="tp-modal-overlay">
+        <div class="tp-modal" style="max-width:700px; max-height:90vh; overflow-y:auto;">
+            <div class="flex items-center justify-between mb-5">
+                <div class="flex items-center gap-3">
+                    <div class="w-10 h-10 rounded-full flex items-center justify-center"
+                        style="background:rgba(99,102,241,0.12);">
+                        <span class="material-symbols-outlined" style="color:#6366f1;">construction</span>
+                    </div>
+                    <div>
+                        <h3 class="tp-modal-title">Aksiyon Al</h3>
+                        <p class="text-xs" style="color:var(--text-muted);" id="aksiyonAuditTitle"></p>
+                    </div>
+                </div>
+                <button onclick="closeAksiyonModal()" class="tp-btn-ghost">
+                    <span class="material-symbols-outlined">close</span>
+                </button>
+            </div>
+            <p class="text-sm mb-4" style="color:var(--text-muted);">
+                Uygunsuz bulunan maddeler için açıklama ve kanıt fotoğrafı ekleyerek merkeze bildirim gönderin.
+            </p>
+            <div id="aksiyonContent">
+                <div class="p-8 text-center">
+                    <div class="tp-spinner mx-auto"></div>
+                </div>
+            </div>
+            <div class="flex gap-3 mt-5 pt-4" style="border-top:1px solid var(--border-color);">
+                <button onclick="closeAksiyonModal()" class="tp-btn tp-btn-secondary">İptal</button>
+                <button onclick="submitAksiyonlar()" id="aksiyonSubmitBtn" class="tp-btn tp-btn-primary">
+                    <span class="material-symbols-outlined">send</span>
+                    Merkeze Gönder
+                </button>
+            </div>
+        </div>
+    </div>
+
+    <style>
+        .action-btn {
+            display: inline-flex;
+            align-items: center;
+            justify-content: center;
+            width: 32px;
+            height: 32px;
+            border-radius: 8px;
+            border: none;
+            background: transparent;
+            cursor: pointer;
+            transition: all 0.2s;
+            color: var(--text-muted);
+            text-decoration: none;
+        }
+
+        .action-btn:hover {
+            background: rgba(255, 255, 255, 0.07);
+        }
+
+        .action-btn.view:hover {
+            color: var(--color-accent);
+        }
+
+        .action-btn.edit:hover {
+            color: #f59e0b;
+        }
+
+        .action-btn.pdf:hover {
+            color: #6366f1;
+        }
+
+        .action-btn.danger:hover {
+            color: #ef4444;
+        }
+
+        .action-btn.report:hover {
+            color: #ef4444;
+        }
+
+        .action-btn.action:hover {
+            color: #6366f1;
+        }
+
+        .uyg-item {
+            padding: 14px;
+            border-radius: 10px;
+            margin-bottom: 10px;
+            border: 1px solid rgba(239, 68, 68, 0.2);
+            background: rgba(239, 68, 68, 0.04);
+        }
+
+        .uyg-item-q {
+            font-size: 14px;
+            font-weight: 500;
+            color: var(--text-primary);
+            margin-bottom: 4px;
+        }
+
+        .uyg-item-note {
+            font-size: 12px;
+            color: var(--text-muted);
+        }
+
+        .aksiyon-item {
+            padding: 14px;
+            border-radius: 10px;
+            margin-bottom: 12px;
+            border: 1px solid var(--border-color);
+            background: var(--bg-secondary);
+        }
+
+        .aksiyon-item-q {
+            font-size: 13px;
+            font-weight: 600;
+            color: var(--text-primary);
+            margin-bottom: 8px;
+        }
+
+        .aksiyon-textarea {
+            width: 100%;
+            min-height: 64px;
+            padding: 10px 12px;
+            border-radius: 8px;
+            border: 1px solid var(--border-color);
+            background: var(--bg-primary);
+            color: var(--text-primary);
+            font-size: 13px;
+            font-family: inherit;
+            resize: vertical;
+            margin-bottom: 8px;
+        }
+
+        .aksiyon-textarea:focus {
+            outline: none;
+            border-color: var(--color-accent);
+        }
+
+        .aksiyon-file-label {
+            display: inline-flex;
+            align-items: center;
+            gap: 6px;
+            padding: 6px 12px;
+            border-radius: 7px;
+            border: 1px dashed var(--border-color);
+            cursor: pointer;
+            font-size: 12px;
+            color: var(--text-muted);
+            transition: all 0.2s;
+        }
+
+        .aksiyon-file-label:hover {
+            border-color: var(--color-accent);
+            color: var(--color-accent);
+        }
+
+        .aksiyon-preview {
+            display: flex;
+            flex-wrap: wrap;
+            gap: 6px;
+            margin-top: 6px;
+        }
+
+        .aksiyon-preview img {
+            width: 60px;
+            height: 60px;
+            object-fit: cover;
+            border-radius: 6px;
+            border: 1px solid var(--border-color);
+        }
+    </style>
+
     <script>
         const API_URL = '/api';
         const token = localStorage.getItem('token');
@@ -137,9 +356,71 @@
         let allAudits = [], filteredAudits = [], currentPage = 1;
         const perPage = 10;
         let deleteAuditId = null;
+        let currentUygunsuzlukAudit = null;
+        let currentAksiyonAudit = null;
+        let aksiyonFiles = {}; // { questionId: [File, ...] }
 
-        if (['admin', 'planlamacı'].includes(userRole)) {
+        // Role ayarları
+        const isAdmin = userRole === 'admin';
+        const isPlanlamaci = userRole === 'planlamacı';
+        const isGozdenGeciren = userRole === 'gözden_geçiren';
+        const isField = userRole === 'field';
+        const isFirma = userRole === 'firma_sahibi';
+        const isSube = userRole === 'sube_kullanici';
+
+        // Yeni Denetim butonu
+        if (isAdmin || isPlanlamaci) {
             document.getElementById('newAuditBtn').classList.remove('hidden');
+        }
+        // Şirket + Denetçi filtreleri
+        if (isAdmin || isPlanlamaci || isGozdenGeciren) {
+            document.getElementById('companyFilter').classList.remove('hidden');
+            document.getElementById('auditorFilter').classList.remove('hidden');
+        }
+        // Şube filtresi
+        if (isFirma) {
+            document.getElementById('branchFilter').classList.remove('hidden');
+        }
+
+        // Filtre verilerini yükle
+        async function loadFilterData() {
+            if (isAdmin || isPlanlamaci || isGozdenGeciren) {
+                try {
+                    const [cRes, uRes] = await Promise.all([
+                        fetch(`${API_URL}/companies`, { headers: { 'Authorization': `Bearer ${token}` } }),
+                        fetch(`${API_URL}/users?role=field`, { headers: { 'Authorization': `Bearer ${token}` } })
+                    ]);
+                    if (cRes.ok) {
+                        const companies = await cRes.json();
+                        const sel = document.getElementById('companyFilter');
+                        companies.forEach(c => {
+                            const o = document.createElement('option');
+                            o.value = c.id; o.textContent = c.name; sel.appendChild(o);
+                        });
+                    }
+                    if (uRes.ok) {
+                        const users = await uRes.json();
+                        const sel = document.getElementById('auditorFilter');
+                        users.forEach(u => {
+                            const o = document.createElement('option');
+                            o.value = u.id; o.textContent = u.email.split('@')[0]; sel.appendChild(o);
+                        });
+                    }
+                } catch (e) { console.error('Filter data error:', e); }
+            }
+            if (isFirma) {
+                try {
+                    const bRes = await fetch(`${API_URL}/branches`, { headers: { 'Authorization': `Bearer ${token}` } });
+                    if (bRes.ok) {
+                        const branches = await bRes.json();
+                        const sel = document.getElementById('branchFilter');
+                        branches.forEach(b => {
+                            const o = document.createElement('option');
+                            o.value = b.id; o.textContent = b.name; sel.appendChild(o);
+                        });
+                    }
+                } catch (e) { console.error('Branch filter error:', e); }
+            }
         }
 
         async function loadAudits() {
@@ -147,11 +428,42 @@
                 const response = await fetch(`${API_URL}/audits`, { headers: { 'Authorization': `Bearer ${token}` } });
                 if (response.ok) {
                     allAudits = await response.json();
+                    // Tarih sıralaması (en yeni önce)
+                    allAudits.sort((a, b) => new Date(b.createdAt) - new Date(a.createdAt));
                     filteredAudits = [...allAudits];
                     renderAudits();
                 }
             } catch (error) { console.error('Load audits error:', error); }
             document.getElementById('loadingState').classList.add('hidden');
+        }
+
+        function renderActionButtons(audit) {
+            const viewBtn = `<a href="${getAuditLink(audit)}" class="action-btn view" title="Görüntüle">
+                <span class="material-symbols-outlined" style="font-size:20px;">visibility</span>
+            </a>`;
+            const pdfBtn = `<button onclick="exportPDF(${audit.id})" class="action-btn pdf" title="PDF Oluştur">
+                <span class="material-symbols-outlined" style="font-size:20px;">picture_as_pdf</span>
+            </button>`;
+            const editBtn = `<a href="/public/denetim_cevaplama.html?id=${audit.id}" class="action-btn edit" title="Düzenle">
+                <span class="material-symbols-outlined" style="font-size:20px;">edit</span>
+            </a>`;
+            const deleteBtn = `<button onclick="openDeleteModal(${audit.id})" class="action-btn danger" title="Sil">
+                <span class="material-symbols-outlined" style="font-size:20px;">delete</span>
+            </button>`;
+            const uygunsuzlukBtn = `<button onclick="openUygunsuzlukModal(${audit.id})" class="action-btn report" title="Uygunsuzluk Raporu">
+                <span class="material-symbols-outlined" style="font-size:20px;">report_problem</span>
+            </button>`;
+            const aksiyonBtn = `<button onclick="openAksiyonModal(${audit.id})" class="action-btn action" title="Aksiyon Al">
+                <span class="material-symbols-outlined" style="font-size:20px;">construction</span>
+            </button>`;
+
+            if (isAdmin) return viewBtn + editBtn + pdfBtn + deleteBtn;
+            if (isPlanlamaci) return viewBtn + editBtn + pdfBtn;
+            if (isGozdenGeciren) return viewBtn + editBtn + pdfBtn;
+            if (isField) return viewBtn + pdfBtn;
+            if (isFirma) return viewBtn + pdfBtn + uygunsuzlukBtn;
+            if (isSube) return viewBtn + pdfBtn + aksiyonBtn;
+            return viewBtn;
         }
 
         function renderAudits() {
@@ -199,15 +511,7 @@
                     <td class="text-sm">${formatDate(audit.createdAt)}</td>
                     <td>
                         <div class="flex items-center gap-1">
-                            <a href="${getAuditLink(audit)}" class="tp-btn-ghost" style="color:var(--color-accent);" title="Görüntüle">
-                                <span class="material-symbols-outlined text-xl">visibility</span>
-                            </a>
-                            ${userRole === 'admin' ? `
-                                <button onclick="openDeleteModal(${audit.id})" class="tp-btn-ghost" style="color:var(--text-muted);" title="Sil"
-                                        onmouseover="this.style.color='#ef4444'" onmouseout="this.style.color='var(--text-muted)'">
-                                    <span class="material-symbols-outlined text-xl">delete</span>
-                                </button>
-                            ` : ''}
+                            ${renderActionButtons(audit)}
                         </div>
                     </td>
                 </tr>
@@ -219,21 +523,38 @@
         }
         function getScoreColor(p) { return p >= 80 ? 'tp-score-high' : p >= 60 ? 'tp-score-mid' : 'tp-score-low'; }
         function getAuditLink(a) {
-            if (['draft', 'revision_requested'].includes(a.status)) return `/public/denetim_cevaplama.html?id=${a.id}`;
+            if (['draft', 'revision_requested', 'pending'].includes(a.status) && (isAdmin || isField || isPlanlamaci)) {
+                return `/public/denetim_cevaplama.html?id=${a.id}`;
+            }
             return `/public/denetim_inceleme.html?id=${a.id}`;
         }
         function formatDate(d) { return new Date(d).toLocaleDateString('tr-TR', { day: '2-digit', month: '2-digit', year: 'numeric' }); }
 
+        // Filtreler
         document.getElementById('searchInput').addEventListener('input', applyFilters);
         document.getElementById('statusFilter').addEventListener('change', applyFilters);
+        document.getElementById('companyFilter').addEventListener('change', applyFilters);
+        document.getElementById('auditorFilter').addEventListener('change', applyFilters);
+        document.getElementById('branchFilter').addEventListener('change', applyFilters);
 
         function applyFilters() {
             const search = document.getElementById('searchInput').value.toLowerCase();
             const status = document.getElementById('statusFilter').value;
+            const companyId = document.getElementById('companyFilter').value;
+            const auditorId = document.getElementById('auditorFilter').value;
+            const branchId = document.getElementById('branchFilter').value;
+
             filteredAudits = allAudits.filter(a => {
-                const matchSearch = !search || (a.title || '').toLowerCase().includes(search) || (a.branch?.name || '').toLowerCase().includes(search) || (a.user?.email || '').toLowerCase().includes(search);
+                const matchSearch = !search ||
+                    (a.title || '').toLowerCase().includes(search) ||
+                    (a.branch?.name || '').toLowerCase().includes(search) ||
+                    (a.user?.email || '').toLowerCase().includes(search) ||
+                    (a.branch?.company?.name || '').toLowerCase().includes(search);
                 const matchStatus = !status || a.status === status;
-                return matchSearch && matchStatus;
+                const matchCompany = !companyId || String(a.branch?.company?.id || a.company?.id || '') === companyId;
+                const matchAuditor = !auditorId || String(a.user?.id || '') === auditorId;
+                const matchBranch = !branchId || String(a.branch?.id || '') === branchId;
+                return matchSearch && matchStatus && matchCompany && matchAuditor && matchBranch;
             });
             currentPage = 1;
             renderAudits();
@@ -249,24 +570,241 @@
             } catch (e) { alert('Denetim oluşturulurken bir hata oluştu'); }
         }
 
+        // --- Delete ---
         function openDeleteModal(id) { deleteAuditId = id; document.getElementById('deleteModal').classList.add('active'); }
         function closeDeleteModal() { document.getElementById('deleteModal').classList.remove('active'); deleteAuditId = null; }
         async function confirmDelete() {
             if (!deleteAuditId) return;
-            try { await fetch(`${API_URL}/audits/${deleteAuditId}`, { method: 'DELETE', headers: { 'Authorization': `Bearer ${token}` } }); allAudits = allAudits.filter(a => a.id !== deleteAuditId); applyFilters(); closeDeleteModal(); } catch (e) { alert('Silme işlemi başarısız'); }
+            try {
+                await fetch(`${API_URL}/audits/${deleteAuditId}`, { method: 'DELETE', headers: { 'Authorization': `Bearer ${token}` } });
+                allAudits = allAudits.filter(a => a.id !== deleteAuditId);
+                applyFilters();
+                closeDeleteModal();
+            } catch (e) { alert('Silme işlemi başarısız'); }
         }
 
-        function exportCSV() {
-            const headers = ['ID', 'Başlık', 'Durum', 'Sorumlu', 'Puan', 'Tarih', 'Şube', 'Şirket'];
-            const rows = filteredAudits.map(a => [a.id, a.title || 'Denetim #' + a.id, getStatusName(a.status), a.user?.email || '', (a.score?.percent || 0) + '%', formatDate(a.createdAt), a.branch?.name || '', a.branch?.company?.name || '']);
-            const csv = [headers.join(','), ...rows.map(r => r.map(c => `"${c}"`).join(','))].join('\n');
-            const blob = new Blob([csv], { type: 'text/csv;charset=utf-8;' });
-            const url = URL.createObjectURL(blob);
-            const a = document.createElement('a'); a.href = url; a.download = `denetimler_${new Date().toISOString().split('T')[0]}.csv`; a.click();
+        // --- PDF ---
+        function exportPDF(auditId) {
+            const pdfWindow = window.open(`/public/denetim_inceleme.html?id=${auditId}&print=1`, '_blank');
+            if (pdfWindow) {
+                pdfWindow.addEventListener('load', () => {
+                    setTimeout(() => pdfWindow.print(), 800);
+                });
+            }
         }
 
-        document.getElementById('selectAll').addEventListener('change', (e) => { document.querySelectorAll('.audit-checkbox').forEach(cb => cb.checked = e.target.checked); });
+        // --- Excel ---
+        function exportExcel() {
+            const headers = ['ID', 'Başlık', 'Durum', 'Sorumlu', 'Puan (%)', 'Tarih', 'Şube', 'Şirket'];
+            const rows = filteredAudits.map(a => [
+                a.id,
+                a.title || 'Denetim #' + a.id,
+                getStatusName(a.status),
+                a.user?.email || '',
+                a.score?.percent || 0,
+                formatDate(a.createdAt),
+                a.branch?.name || '',
+                a.branch?.company?.name || ''
+            ]);
+            const ws = XLSX.utils.aoa_to_sheet([headers, ...rows]);
+            ws['!cols'] = [{ wch: 6 }, { wch: 30 }, { wch: 14 }, { wch: 22 }, { wch: 10 }, { wch: 14 }, { wch: 20 }, { wch: 22 }];
+            const wb = XLSX.utils.book_new();
+            XLSX.utils.book_append_sheet(wb, ws, 'Denetimler');
+            XLSX.writeFile(wb, `denetimler_${new Date().toISOString().split('T')[0]}.xlsx`);
+        }
 
+        // --- Uygunsuzluk Raporu ---
+        async function openUygunsuzlukModal(auditId) {
+            currentUygunsuzlukAudit = allAudits.find(a => a.id === auditId);
+            document.getElementById('uygunsuzlukAuditTitle').textContent =
+                (currentUygunsuzlukAudit?.title || 'Denetim #' + auditId) +
+                (currentUygunsuzlukAudit?.branch?.name ? ' · ' + currentUygunsuzlukAudit.branch.name : '');
+            document.getElementById('uygunsuzlukModal').classList.add('active');
+            document.getElementById('uygunsuzlukContent').innerHTML = '<div class="p-8 text-center"><div class="tp-spinner mx-auto"></div></div>';
+
+            try {
+                const res = await fetch(`${API_URL}/audits/${auditId}`, { headers: { 'Authorization': `Bearer ${token}` } });
+                if (!res.ok) throw new Error();
+                const { audit } = await res.json();
+
+                // Sadece UD (Uygun Değil) cevapları filtrele
+                const uygunsuzCevaplar = (audit.answers || []).filter(a => a.value === 'UD');
+
+                if (uygunsuzCevaplar.length === 0) {
+                    document.getElementById('uygunsuzlukContent').innerHTML = `
+                        <div class="p-8 text-center">
+                            <span class="material-symbols-outlined text-4xl" style="color:#10b981;">check_circle</span>
+                            <p class="mt-3 font-medium" style="color:var(--text-primary);">Uygunsuzluk bulunamadı</p>
+                            <p class="text-sm mt-1" style="color:var(--text-muted);">Bu denetimde tüm maddeler uygun bulunmuştur.</p>
+                        </div>`;
+                    return;
+                }
+
+                const html = `
+                    <div class="mb-3 flex items-center gap-2">
+                        <span class="font-semibold text-sm" style="color:#ef4444;">${uygunsuzCevaplar.length} uygunsuzluk tespit edildi</span>
+                    </div>
+                    ${uygunsuzCevaplar.map((ans, i) => `
+                        <div class="uyg-item">
+                            <div class="uyg-item-q">${i + 1}. ${ans.question?.text || 'Soru #' + ans.questionId}</div>
+                            ${ans.question?.category?.title ? `<div class="uyg-item-note" style="margin-bottom:4px;">📁 ${ans.question.category.title}</div>` : ''}
+                            ${ans.note ? `<div class="uyg-item-note">💬 ${ans.note}</div>` : ''}
+                        </div>
+                    `).join('')}`;
+                document.getElementById('uygunsuzlukContent').innerHTML = html;
+            } catch (e) {
+                document.getElementById('uygunsuzlukContent').innerHTML = '<p class="text-center p-8" style="color:var(--text-muted);">Veri yüklenemedi.</p>';
+            }
+        }
+        function closeUygunsuzlukModal() {
+            document.getElementById('uygunsuzlukModal').classList.remove('active');
+            currentUygunsuzlukAudit = null;
+        }
+        function printUygunsuzluk() {
+            const content = document.getElementById('uygunsuzlukContent').innerHTML;
+            const title = document.getElementById('uygunsuzlukAuditTitle').textContent;
+            const w = window.open('', '_blank');
+            w.document.write(`<!DOCTYPE html><html><head><meta charset="UTF-8"><title>Uygunsuzluk Raporu</title>
+            <style>body{font-family:sans-serif;padding:24px;} h1{font-size:20px;margin-bottom:4px;} .sub{color:#666;font-size:13px;margin-bottom:20px;}
+            .uyg-item{padding:12px;border:1px solid #fca5a5;border-radius:8px;margin-bottom:10px;background:#fff5f5;}
+            .uyg-item-q{font-weight:600;font-size:14px;margin-bottom:4px;} .uyg-item-note{font-size:12px;color:#666;}
+            @media print{button{display:none}}</style></head><body>
+            <h1>Uygunsuzluk Raporu</h1><div class="sub">${title}</div>${content}</body></html>`);
+            w.document.close();
+            setTimeout(() => w.print(), 400);
+        }
+
+        // --- Aksiyon Al ---
+        async function openAksiyonModal(auditId) {
+            currentAksiyonAudit = allAudits.find(a => a.id === auditId);
+            aksiyonFiles = {};
+            document.getElementById('aksiyonAuditTitle').textContent =
+                (currentAksiyonAudit?.title || 'Denetim #' + auditId) +
+                (currentAksiyonAudit?.branch?.name ? ' · ' + currentAksiyonAudit.branch.name : '');
+            document.getElementById('aksiyonModal').classList.add('active');
+            document.getElementById('aksiyonContent').innerHTML = '<div class="p-8 text-center"><div class="tp-spinner mx-auto"></div></div>';
+
+            try {
+                const res = await fetch(`${API_URL}/audits/${auditId}`, { headers: { 'Authorization': `Bearer ${token}` } });
+                if (!res.ok) throw new Error();
+                const { audit } = await res.json();
+
+                const uygunsuzCevaplar = (audit.answers || []).filter(a => a.value === 'UD');
+
+                if (uygunsuzCevaplar.length === 0) {
+                    document.getElementById('aksiyonContent').innerHTML = `
+                        <div class="p-8 text-center">
+                            <span class="material-symbols-outlined text-4xl" style="color:#10b981;">check_circle</span>
+                            <p class="mt-3 font-medium" style="color:var(--text-primary);">Uygunsuzluk bulunamadı</p>
+                            <p class="text-sm mt-1" style="color:var(--text-muted);">Bu denetimde aksiyon alınacak madde yok.</p>
+                        </div>`;
+                    document.getElementById('aksiyonSubmitBtn').disabled = true;
+                    return;
+                }
+                document.getElementById('aksiyonSubmitBtn').disabled = false;
+
+                const html = uygunsuzCevaplar.map((ans, i) => `
+                    <div class="aksiyon-item" data-question-id="${ans.questionId}">
+                        <div class="aksiyon-item-q">${i + 1}. ${ans.question?.text || 'Soru #' + ans.questionId}</div>
+                        ${ans.question?.category?.title ? `<div class="text-xs mb-2" style="color:var(--text-muted);">📁 ${ans.question.category.title}</div>` : ''}
+                        ${ans.note ? `<div class="text-xs mb-2" style="color:var(--text-muted);">Denetçi notu: ${ans.note}</div>` : ''}
+                        <textarea class="aksiyon-textarea" placeholder="Düzeltme açıklamasını yazın... (Örn: Tuvaletler temizlendi, fotoğraf ekte)" 
+                            id="aksiyon-desc-${ans.questionId}"></textarea>
+                        <div>
+                            <label class="aksiyon-file-label" for="aksiyon-file-${ans.questionId}">
+                                <span class="material-symbols-outlined" style="font-size:16px;">add_photo_alternate</span>
+                                Fotoğraf Ekle
+                            </label>
+                            <input type="file" id="aksiyon-file-${ans.questionId}" accept="image/*" multiple class="hidden"
+                                onchange="handleAksiyonFile(${ans.questionId}, this)">
+                        </div>
+                        <div class="aksiyon-preview" id="aksiyon-preview-${ans.questionId}"></div>
+                    </div>
+                `).join('');
+                document.getElementById('aksiyonContent').innerHTML = html;
+            } catch (e) {
+                document.getElementById('aksiyonContent').innerHTML = '<p class="text-center p-8" style="color:var(--text-muted);">Veri yüklenemedi.</p>';
+            }
+        }
+
+        function handleAksiyonFile(questionId, input) {
+            const files = Array.from(input.files);
+            aksiyonFiles[questionId] = (aksiyonFiles[questionId] || []).concat(files);
+            const preview = document.getElementById(`aksiyon-preview-${questionId}`);
+            preview.innerHTML = '';
+            (aksiyonFiles[questionId] || []).forEach(f => {
+                const img = document.createElement('img');
+                img.src = URL.createObjectURL(f);
+                img.alt = f.name;
+                preview.appendChild(img);
+            });
+        }
+
+        function closeAksiyonModal() {
+            document.getElementById('aksiyonModal').classList.remove('active');
+            currentAksiyonAudit = null;
+            aksiyonFiles = {};
+        }
+
+        async function submitAksiyonlar() {
+            if (!currentAksiyonAudit) return;
+            const btn = document.getElementById('aksiyonSubmitBtn');
+            btn.disabled = true;
+            btn.innerHTML = '<span class="material-symbols-outlined" style="font-size:18px;">hourglass_empty</span> Gönderiliyor...';
+
+            try {
+                const items = document.querySelectorAll('#aksiyonContent .aksiyon-item');
+                const actions = [];
+
+                for (const item of items) {
+                    const qId = parseInt(item.dataset.questionId);
+                    const desc = document.getElementById(`aksiyon-desc-${qId}`)?.value?.trim() || '';
+                    const uploadedPhotoUrls = [];
+
+                    if (aksiyonFiles[qId] && aksiyonFiles[qId].length > 0) {
+                        for (const file of aksiyonFiles[qId]) {
+                            const formData = new FormData();
+                            formData.append('file', file);
+                            const r = await fetch(`${API_URL}/upload`, {
+                                method: 'POST',
+                                headers: { 'Authorization': `Bearer ${token}` },
+                                body: formData
+                            });
+                            if (r.ok) {
+                                const { url } = await r.json();
+                                uploadedPhotoUrls.push(url);
+                            }
+                        }
+                    }
+                    actions.push({ questionId: qId, description: desc, photoUrls: uploadedPhotoUrls });
+                }
+
+                const res = await fetch(`${API_URL}/audits/${currentAksiyonAudit.id}/corrective-actions`, {
+                    method: 'POST',
+                    headers: { 'Authorization': `Bearer ${token}`, 'Content-Type': 'application/json' },
+                    body: JSON.stringify({ actions })
+                });
+
+                if (res.ok) {
+                    closeAksiyonModal();
+                    alert('Aksiyonlar merkeze başarıyla gönderildi!');
+                } else {
+                    const err = await res.json();
+                    alert('Hata: ' + (err.error || 'Gönderim başarısız'));
+                }
+            } catch (e) {
+                alert('Gönderim sırasında bir hata oluştu.');
+            } finally {
+                btn.disabled = false;
+                btn.innerHTML = '<span class="material-symbols-outlined">send</span> Merkeze Gönder';
+            }
+        }
+
+        document.getElementById('selectAll').addEventListener('change', (e) => {
+            document.querySelectorAll('.audit-checkbox').forEach(cb => cb.checked = e.target.checked);
+        });
+
+        loadFilterData();
         loadAudits();
     </script>
 </body>
