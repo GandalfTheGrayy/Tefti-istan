@@ -1,26 +1,63 @@
 // TeftişPro - Backend Server
 // Teftiş ve Kalite Kontrol Uygulaması API
 
+require('dotenv').config();
+
 const express = require('express');
 const cors = require('cors');
 const helmet = require('helmet');
-const morgan = require('morgan');
+const expressWinston = require('express-winston');
 const rateLimit = require('express-rate-limit');
 const bcrypt = require('bcryptjs');
 const jwt = require('jsonwebtoken');
 const multer = require('multer');
 const path = require('path');
 const fs = require('fs');
+const sharp = require('sharp');
 const { PrismaClient } = require('@prisma/client');
 const { z } = require('zod');
+const { validate } = require('./middleware/validate');
+const { passwordSchema } = require('./schemas/common');
+const { updateCompanySchema, deleteCompanySchema } = require('./schemas/company.schema');
+const { updateBranchSchema, assignBranchSchema } = require('./schemas/branch.schema');
+const { profileUpdateSchema, profileSignatureSchema } = require('./schemas/profile.schema');
+const { correctiveActionCreateSchema, correctiveActionUpdateSchema, auditCorrectiveActionsSchema } = require('./schemas/correctiveAction.schema');
+const { auditParamsSchema, auditAnswersSchema, auditReviewSchema } = require('./schemas/audit.schema');
+const { paramsIdSchema, paramsOnlySchema } = require('./schemas/common');
 const PDFDocument = require('pdfkit');
+const cookieParser = require('cookie-parser');
+const crypto = require('crypto');
+const logger = require('./logger');
+const audit = require('./audit');
+
+const JWT_SECRET = process.env.JWT_SECRET;
+if (!JWT_SECRET) {
+  console.error('FATAL: JWT_SECRET ortam değişkeni tanımlı değil. Uygulama başlatılamıyor.');
+  process.exit(1);
+}
 
 const prisma = new PrismaClient();
-const app = express();
 
-// JWT Secret
-const JWT_SECRET = process.env.JWT_SECRET || 'teftispro-super-secret-key-2024';
+// Faz 4.3: Prisma middleware - User modelinden password alanını API yanıtlarından çıkar
+// Login için prismaWithPassword kullanılır (bcrypt.compare için password gerekli)
+const prismaWithPassword = new PrismaClient();
+prisma.$use(async (params, next) => {
+  const result = await next(params);
+  if (params.model === 'User' && result) {
+    const items = Array.isArray(result) ? result : [result];
+    items.forEach(u => { if (u && typeof u === 'object') delete u.password; });
+  }
+  return result;
+});
+
+audit.init(prismaWithPassword);
+const { createAuditLog, maskEmail } = audit;
+
+const app = express();
 const PORT = process.env.PORT || 3636;
+
+// Faz 4.4: Express sunucu imzasını gizle
+app.disable('x-powered-by');
 
 // Uploads klasörü
 const uploadsDir = path.join(__dirname, '..', 'uploads');
@@ -28,73 +65,413 @@ if (!fs.existsSync(uploadsDir)) {
   fs.mkdirSync(uploadsDir, { recursive: true });
 }
 
-// Multer konfigürasyonu
+// Dosya güvenliği - 1.5, 1.5c
+const ALLOWED_IMAGE_MIME = ['image/jpeg', 'image/png', 'image/gif', 'image/webp'];
+const ALLOWED_IMAGE_EXT = ['.jpg', '.jpeg', '.png', '.gif', '.webp'];
+const ALLOWED_WITH_PDF_MIME = [...ALLOWED_IMAGE_MIME, 'application/pdf'];
+const ALLOWED_WITH_PDF_EXT = [...ALLOWED_IMAGE_EXT, '.pdf'];
+
+function checkMagicBytes(filePath, mimeType) {
+  const buf = Buffer.alloc(12);
+  const fd = fs.openSync(filePath, 'r');
+  fs.readSync(fd, buf, 0, 12, 0);
+  fs.closeSync(fd);
+  if (mimeType === 'image/jpeg' || mimeType === 'image/jpg') {
+    return buf[0] === 0xff && buf[1] === 0xd8 && buf[2] === 0xff;
+  }
+  if (mimeType === 'image/png') {
+    return buf[0] === 0x89 && buf[1] === 0x50 && buf[2] === 0x4e && buf[3] === 0x47;
+  }
+  if (mimeType === 'image/gif') {
+    return buf[0] === 0x47 && buf[1] === 0x49 && buf[2] === 0x46;
+  }
+  if (mimeType === 'image/webp') {
+    return buf[0] === 0x52 && buf[1] === 0x49 && buf[2] === 0x46 && buf[3] === 0x46;
+  }
+  if (mimeType === 'application/pdf') {
+    return buf[0] === 0x25 && buf[1] === 0x50 && buf[2] === 0x44 && buf[3] === 0x46;
+  }
+  return false;
+}
+
+async function compressImage(inputPath, options = {}) {
+  const { maxWidth = 1920, quality = 80, format = 'jpeg' } = options;
+  const metadata = await sharp(inputPath).metadata();
+  const needResize = metadata.width > maxWidth;
+  let pipeline = sharp(inputPath);
+  if (needResize) {
+    pipeline = pipeline.resize(maxWidth, null, { withoutEnlargement: true });
+  }
+  const basePath = inputPath.replace(/\.[^.]+$/, '');
+  const outputPath = `${basePath}.${format === 'jpeg' ? 'jpg' : 'png'}`;
+  const tempPath = `${basePath}.tmp${Date.now()}`;
+  try {
+    if (format === 'jpeg') {
+      await pipeline.jpeg({ quality }).toFile(tempPath);
+    } else if (format === 'png') {
+      await pipeline.png({ compressionLevel: 9 }).toFile(tempPath);
+    } else {
+      return inputPath;
+    }
+    fs.unlinkSync(inputPath);
+    fs.renameSync(tempPath, outputPath);
+    return outputPath;
+  } catch (error) {
+    try { fs.unlinkSync(tempPath); } catch (_) {}
+    throw error;
+  }
+}
+
+function createFileFilter(allowedMime, allowedExt) {
+  return (req, file, cb) => {
+    if (file.originalname.includes('..') || file.originalname.includes('\0')) {
+      return cb(new Error('Geçersiz dosya adı'), false);
+    }
+    const ext = path.extname(file.originalname).toLowerCase();
+    if (allowedMime.includes(file.mimetype) && allowedExt.includes(ext)) {
+      cb(null, true);
+    } else {
+      cb(new Error('Desteklenmeyen dosya formatı. İzin verilen: JPG, PNG, GIF, WebP' + (allowedExt.includes('.pdf') ? ', PDF' : '')), false);
+    }
+  };
+}
+
 const storage = multer.diskStorage({
   destination: (req, file, cb) => cb(null, uploadsDir),
   filename: (req, file, cb) => {
     const uniqueSuffix = Date.now() + '-' + Math.round(Math.random() * 1E9);
-    cb(null, uniqueSuffix + path.extname(file.originalname));
+    const ext = path.extname(file.originalname).toLowerCase();
+    const safeExt = ALLOWED_IMAGE_EXT.includes(ext) ? ext : (ALLOWED_WITH_PDF_EXT.includes(ext) ? ext : '.jpg');
+    cb(null, uniqueSuffix + safeExt);
   }
 });
-const upload = multer({ storage, limits: { fileSize: 10 * 1024 * 1024 } }); // 10MB limit
 
-// Middleware
-app.use(helmet({ crossOriginResourcePolicy: false }));
-app.use(cors({ origin: true, credentials: true }));
-app.use(morgan('dev'));
-app.use(express.json({ limit: '50mb' }));
-app.use(express.urlencoded({ extended: true }));
-app.use('/uploads', express.static(uploadsDir));
+const uploadImagesOnly = multer({
+  storage,
+  limits: { fileSize: 5 * 1024 * 1024 },
+  fileFilter: createFileFilter(ALLOWED_IMAGE_MIME, ALLOWED_IMAGE_EXT)
+});
+
+const uploadWithPdf = multer({
+  storage,
+  limits: { fileSize: 5 * 1024 * 1024 },
+  fileFilter: createFileFilter(ALLOWED_WITH_PDF_MIME, ALLOWED_WITH_PDF_EXT)
+});
+
+// CORS - 1.2
+const allowedOrigins = (process.env.ALLOWED_ORIGINS || '').split(',').map(o => o.trim()).filter(Boolean);
+
+// Helmet + CSP - 1.6
+app.use(helmet({
+  contentSecurityPolicy: {
+    directives: {
+      defaultSrc: ["'self'"],
+      scriptSrc: ["'self'", "https://cdnjs.cloudflare.com", "https://cdn.jsdelivr.net", "https://cdn.sheetjs.com"],
+      styleSrc: ["'self'", "'unsafe-inline'", "https://fonts.googleapis.com"],
+      fontSrc: ["'self'", "https://fonts.gstatic.com", "https://fonts.googleapis.com"],
+      imgSrc: ["'self'", "data:", "blob:"],
+      connectSrc: ["'self'"],
+      frameSrc: ["'none'"],
+      objectSrc: ["'none'"],
+      baseUri: ["'self'"],
+      formAction: ["'self'"],
+      upgradeInsecureRequests: []
+    }
+  },
+  crossOriginResourcePolicy: { policy: 'same-origin' },
+  crossOriginEmbedderPolicy: false,
+  hsts: { maxAge: 31536000, includeSubDomains: true, preload: true },
+  referrerPolicy: { policy: 'strict-origin-when-cross-origin' }
+}));
+
+// HTTPS yönlendirmesi - 1.7
+if (process.env.NODE_ENV === 'production') {
+  app.use((req, res, next) => {
+    if (req.headers['x-forwarded-proto'] !== 'https') {
+      return res.redirect(301, `https://${req.hostname}${req.url}`);
+    }
+    next();
+  });
+}
+
+app.use(cors({
+  origin: (origin, callback) => {
+    if (!origin || allowedOrigins.includes(origin)) {
+      callback(null, true);
+    } else {
+      callback(new Error('CORS politikası tarafından engellendi'));
+    }
+  },
+  credentials: true,
+  methods: ['GET', 'POST', 'PUT', 'DELETE'],
+  allowedHeaders: ['Content-Type', 'Authorization', 'X-CSRF-Token'],
+  maxAge: 600
+}));
+app.use(cookieParser());
+app.use(express.json({ limit: '2mb' }));
+app.use(express.urlencoded({ extended: true, limit: '1mb' }));
+
+// Faz 5: Yapılandırılmış HTTP loglama (Morgan yerine)
+app.use(expressWinston.logger({
+  winstonInstance: logger,
+  meta: true,
+  msg: 'HTTP {{req.method}} {{req.url}} {{res.statusCode}} {{res.responseTime}}ms',
+  expressFormat: false,
+  colorize: false,
+  dynamicMeta: (req, res) => ({
+    userId: req.user?.id ?? null,
+    userEmail: req.user?.email ?? null,
+    ip: req.ip,
+    userAgent: req.get('User-Agent')
+  })
+}));
+
+// Faz 5: Rate limit aşıldığında denetim izi
+function rateLimitHandler(message, resourceLabel) {
+  return async (req, res) => {
+    createAuditLog({
+      userId: req.user?.id ?? null,
+      userEmail: req.user?.email ?? null,
+      action: 'RATE_LIMIT',
+      resource: resourceLabel,
+      ipAddress: req.ip,
+      userAgent: req.get('User-Agent'),
+      details: req.path || req.url
+    });
+    res.status(429).json(message);
+  };
+}
 
 // Rate Limiting
 const generalLimiter = rateLimit({
   windowMs: 15 * 60 * 1000, // 15 dakika
   max: 200,
-  message: { error: 'Çok fazla istek. Lütfen daha sonra tekrar deneyin.' }
+  message: { error: 'Çok fazla istek. Lütfen daha sonra tekrar deneyin.' },
+  handler: rateLimitHandler({ error: 'Çok fazla istek. Lütfen daha sonra tekrar deneyin.' }, 'API')
 });
 
+// Faz 2.6: Login rate limit sıkılaştırma
 const loginLimiter = rateLimit({
-  windowMs: 10 * 60 * 1000, // 10 dakika
-  max: 20,
-  message: { error: 'Çok fazla giriş denemesi. Lütfen daha sonra tekrar deneyin.' }
+  windowMs: 15 * 60 * 1000, // 15 dakika
+  max: parseInt(process.env.LOGIN_RATE_LIMIT_MAX || '5', 10),
+  message: { error: 'Çok fazla giriş denemesi. 15 dakika sonra tekrar deneyin.' },
+  standardHeaders: true,
+  legacyHeaders: false,
+  keyGenerator: (req) => req.body?.email || req.ip,
+  handler: rateLimitHandler({ error: 'Çok fazla giriş denemesi. 15 dakika sonra tekrar deneyin.' }, 'Auth')
 });
+
+// Faz 4.5: Endpoint bazlı rate limit'ler
+const uploadLimiter = rateLimit({
+  windowMs: 15 * 60 * 1000,
+  max: 30,
+  message: { error: 'Çok fazla dosya yükleme denemesi.' },
+  handler: rateLimitHandler({ error: 'Çok fazla dosya yükleme denemesi.' }, 'Upload')
+});
+
+const writeLimiter = rateLimit({
+  windowMs: 15 * 60 * 1000,
+  max: 50,
+  message: { error: 'Çok fazla yazma işlemi.' },
+  handler: rateLimitHandler({ error: 'Çok fazla yazma işlemi.' }, 'Write')
+});
+
+// Faz 4.4: Async handler - hataları global error handler'a iletir (Prisma P2002, P2025 vb.)
+const asyncHandler = (fn) => (req, res, next) => Promise.resolve(fn(req, res, next)).catch(next);
 
 app.use(generalLimiter);
 
+// CSRF token store - user-bound tokens for mobile, loginOnly for web/mobile login
+const csrfTokenStore = new Map(); // token -> { issuedAt, userId?, loginOnly? }
+const CSRF_TOKEN_TTL_MS = 60 * 60 * 1000; // 1 hour
+
+function cleanupExpiredCsrfTokens() {
+  const now = Date.now();
+  for (const [token, data] of csrfTokenStore.entries()) {
+    if (now - data.issuedAt > CSRF_TOKEN_TTL_MS) {
+      csrfTokenStore.delete(token);
+    }
+  }
+}
+setInterval(cleanupExpiredCsrfTokens, 15 * 60 * 1000); // every 15 min
+
+// Faz 3.3: CSRF token doğrulama middleware
+function validateCSRF(req, res, next) {
+  if (['GET', 'HEAD', 'OPTIONS'].includes(req.method)) {
+    return next();
+  }
+  // Only /auth/refresh exempt - token renewal when access token expired
+  if (req.path === '/auth/refresh') {
+    return next();
+  }
+  const cookieToken = req.cookies?.csrf_token;
+  const headerToken = req.headers['x-csrf-token'];
+
+  // Web: cookie + header must match
+  if (cookieToken && headerToken && cookieToken === headerToken) {
+    return next();
+  }
+
+  // Mobile or cookie mismatch: validate header token from store (header takes precedence when Bearer present)
+  if (headerToken) {
+    const stored = csrfTokenStore.get(headerToken);
+    if (!stored) {
+      createAuditLog({
+        action: 'CSRF_FAILED',
+        resource: 'Auth',
+        ipAddress: req.ip,
+        userAgent: req.get('User-Agent'),
+        details: 'Token depoda bulunamadı'
+      });
+      return res.status(403).json({ error: 'Geçersiz CSRF token' });
+    }
+    if (stored.issuedAt && (Date.now() - stored.issuedAt) > CSRF_TOKEN_TTL_MS) {
+      csrfTokenStore.delete(headerToken);
+      createAuditLog({
+        action: 'CSRF_FAILED',
+        resource: 'Auth',
+        ipAddress: req.ip,
+        userAgent: req.get('User-Agent'),
+        details: 'Token süresi doldu'
+      });
+      return res.status(403).json({ error: 'Geçersiz CSRF token' });
+    }
+    if (stored.loginOnly) {
+      if (req.path === '/auth/login') {
+        return next();
+      }
+      createAuditLog({
+        action: 'CSRF_FAILED',
+        resource: 'Auth',
+        ipAddress: req.ip,
+        userAgent: req.get('User-Agent'),
+        details: 'LoginOnly token yanlış path için kullanıldı'
+      });
+      return res.status(403).json({ error: 'Geçersiz CSRF token' });
+    }
+    if (stored.userId != null) {
+      const bearerToken = req.headers.authorization?.startsWith('Bearer ')
+        ? req.headers.authorization.split(' ')[1]
+        : null;
+      if (!bearerToken) {
+        createAuditLog({
+          action: 'CSRF_FAILED',
+          resource: 'Auth',
+          ipAddress: req.ip,
+          userAgent: req.get('User-Agent'),
+          details: 'Bearer token eksik'
+        });
+        return res.status(403).json({ error: 'Geçersiz CSRF token' });
+      }
+      try {
+        const decoded = jwt.verify(bearerToken, JWT_SECRET);
+        if (decoded.id !== stored.userId) {
+          createAuditLog({
+            action: 'CSRF_FAILED',
+            resource: 'Auth',
+            ipAddress: req.ip,
+            userAgent: req.get('User-Agent'),
+            details: 'Token userId eşleşmedi'
+          });
+          return res.status(403).json({ error: 'Geçersiz CSRF token' });
+        }
+        return next();
+      } catch (err) {
+        createAuditLog({
+          action: 'CSRF_FAILED',
+          resource: 'Auth',
+          ipAddress: req.ip,
+          userAgent: req.get('User-Agent'),
+          details: 'Bearer token geçersiz'
+        });
+        return res.status(403).json({ error: 'Geçersiz CSRF token' });
+      }
+    }
+  }
+
+  createAuditLog({
+    action: 'CSRF_FAILED',
+    resource: 'Auth',
+    ipAddress: req.ip,
+    userAgent: req.get('User-Agent'),
+    details: headerToken ? 'Token uyuşmazlığı' : 'Token eksik'
+  });
+  return res.status(403).json({ error: 'Geçersiz CSRF token' });
+}
+app.use(validateCSRF);
+
 // ============ HELPER FUNCTIONS ============
 
-// JWT Token oluşturma
+// Faz 2.2: Şifre karmaşıklık politikası (common.js'den import edildi)
+const BCRYPT_ROUNDS = 12;
+
+// JWT Token oluşturma - Faz 2.4
+const JWT_EXPIRES_IN = process.env.JWT_EXPIRES_IN || '1h';
+const JWT_REFRESH_EXPIRES_IN = process.env.JWT_REFRESH_EXPIRES_IN || '7d';
+
 function generateToken(user) {
   return jwt.sign(
-    { id: user.id, email: user.email, role: user.role.name },
+    { id: user.id, email: user.email, role: user.role.name, type: 'access' },
     JWT_SECRET,
-    { expiresIn: '24h' }
+    { expiresIn: JWT_EXPIRES_IN }
   );
 }
 
-// JWT Token doğrulama middleware
+function generateRefreshToken(user) {
+  return jwt.sign(
+    { id: user.id, type: 'refresh' },
+    JWT_SECRET,
+    { expiresIn: JWT_REFRESH_EXPIRES_IN }
+  );
+}
+
+const cookieOptions = (maxAge) => ({
+  httpOnly: true,
+  secure: process.env.NODE_ENV === 'production',
+  sameSite: 'strict',
+  maxAge,
+  path: '/'
+});
+
+const refreshCookieOptions = (maxAge) => ({
+  httpOnly: true,
+  secure: process.env.NODE_ENV === 'production',
+  sameSite: 'strict',
+  maxAge,
+  path: '/auth/refresh'
+});
+
+// JWT Token doğrulama middleware - Faz 2.1: Cookie + header fallback
 async function authenticate(req, res, next) {
+  const auditCtx = { ipAddress: req.ip, userAgent: req.get('User-Agent'), resource: 'Auth' };
   try {
-    const authHeader = req.headers.authorization;
-    if (!authHeader || !authHeader.startsWith('Bearer ')) {
-      return res.status(401).json({ error: 'Yetkilendirme token\'ı gerekli' });
+    const token = req.cookies?.access_token ||
+      (req.headers.authorization?.startsWith('Bearer ') ? req.headers.authorization.split(' ')[1] : null);
+
+    if (!token) {
+      createAuditLog({ ...auditCtx, action: 'ACCESS_DENIED', details: 'Token eksik' });
+      return res.status(401).json({ error: 'Kimlik doğrulama gerekli' });
     }
 
-    const token = authHeader.split(' ')[1];
     const decoded = jwt.verify(token, JWT_SECRET);
-
-    const user = await prisma.user.findUnique({
+    const user = await prismaWithPassword.user.findUnique({
       where: { id: decoded.id },
       include: { role: true }
     });
 
     if (!user) {
+      createAuditLog({ ...auditCtx, action: 'ACCESS_DENIED', details: 'Kullanıcı bulunamadı' });
       return res.status(401).json({ error: 'Kullanıcı bulunamadı' });
     }
 
     req.user = user;
     next();
   } catch (error) {
+    if (error.name === 'TokenExpiredError') {
+      createAuditLog({ ...auditCtx, action: 'ACCESS_DENIED', details: 'Token süresi doldu' });
+      return res.status(401).json({ error: 'Oturum süresi doldu', code: 'TOKEN_EXPIRED' });
+    }
+    createAuditLog({ ...auditCtx, action: 'ACCESS_DENIED', details: 'Geçersiz token' });
     return res.status(401).json({ error: 'Geçersiz token' });
   }
 }
@@ -103,6 +480,15 @@ async function authenticate(req, res, next) {
 function authorize(...roles) {
   return (req, res, next) => {
     if (!roles.includes(req.user.role.name)) {
+      createAuditLog({
+        userId: req.user.id,
+        userEmail: req.user.email,
+        action: 'ACCESS_DENIED',
+        resource: req.path || 'API',
+        ipAddress: req.ip,
+        userAgent: req.get('User-Agent'),
+        details: 'Yetkisiz erişim'
+      });
       return res.status(403).json({ error: 'Bu işlem için yetkiniz yok' });
     }
     next();
@@ -155,7 +541,30 @@ function calculateScore(answers, questions) {
 
 // ============ AUTH ENDPOINTS ============
 
-// POST /auth/login - Kullanıcı girişi
+// GET /auth/csrf-token - Faz 3.3: CSRF token (web: loginOnly, mobile: userId-bound)
+app.get('/auth/csrf-token', (req, res, next) => {
+  const hasBearer = req.headers.authorization?.startsWith('Bearer ');
+  if (hasBearer) {
+    return authenticate(req, res, (err) => {
+      if (err) return next(err);
+      const csrfToken = crypto.randomBytes(32).toString('hex');
+      csrfTokenStore.set(csrfToken, { issuedAt: Date.now(), userId: req.user.id });
+      res.json({ csrfToken });
+    });
+  }
+  const csrfToken = crypto.randomBytes(32).toString('hex');
+  csrfTokenStore.set(csrfToken, { issuedAt: Date.now(), loginOnly: true });
+  res.cookie('csrf_token', csrfToken, {
+    httpOnly: false,
+    secure: process.env.NODE_ENV === 'production',
+    sameSite: 'strict',
+    maxAge: 60 * 60 * 1000,
+    path: '/'
+  });
+  res.json({ csrfToken });
+});
+
+// POST /auth/login - Kullanıcı girişi (Faz 2.1 cookie, 2.3 hesap kilitleme)
 app.post('/auth/login', loginLimiter, async (req, res) => {
   try {
     const schema = z.object({
@@ -165,40 +574,166 @@ app.post('/auth/login', loginLimiter, async (req, res) => {
 
     const { email, password } = schema.parse(req.body);
 
-    const user = await prisma.user.findUnique({
+    const user = await prismaWithPassword.user.findUnique({
       where: { email },
       include: { role: true }
     });
 
     if (!user) {
+      await createAuditLog({
+        action: 'LOGIN_FAILED',
+        resource: 'User',
+        details: maskEmail(email) || 'Bilinmeyen e-posta',
+        ipAddress: req.ip,
+        userAgent: req.get('User-Agent')
+      });
       return res.status(401).json({ error: 'E-posta veya şifre hatalı' });
+    }
+
+    // Faz 2.3: Hesap kilitleme kontrolü
+    if (user.lockedUntil && user.lockedUntil > new Date()) {
+      await createAuditLog({
+        action: 'LOGIN_FAILED',
+        resource: 'User',
+        resourceId: user.id,
+        details: 'Hesap kilitli',
+        ipAddress: req.ip,
+        userAgent: req.get('User-Agent')
+      });
+      const remainingMinutes = Math.ceil((user.lockedUntil - new Date()) / 60000);
+      return res.status(423).json({
+        error: `Hesap kilitli. ${remainingMinutes} dakika sonra tekrar deneyin.`
+      });
     }
 
     const isValid = await bcrypt.compare(password, user.password);
+
     if (!isValid) {
+      await createAuditLog({
+        action: 'LOGIN_FAILED',
+        resource: 'User',
+        resourceId: user.id,
+        details: maskEmail(email),
+        ipAddress: req.ip,
+        userAgent: req.get('User-Agent')
+      });
+      const attempts = (user.failedLoginAttempts || 0) + 1;
+      const updateData = { failedLoginAttempts: attempts };
+
+      if (attempts >= 5) {
+        updateData.lockedUntil = new Date(Date.now() + 15 * 60 * 1000); // 15 dk
+        updateData.failedLoginAttempts = 0;
+      }
+
+      await prismaWithPassword.user.update({ where: { id: user.id }, data: updateData });
       return res.status(401).json({ error: 'E-posta veya şifre hatalı' });
     }
 
+    // Başarılı giriş — sayacı sıfırla
+    await prismaWithPassword.user.update({
+      where: { id: user.id },
+      data: { failedLoginAttempts: 0, lockedUntil: null }
+    });
+
     const token = generateToken(user);
+    const refreshToken = generateRefreshToken(user);
+
+    // Faz 2.1: HttpOnly cookie olarak set et
+    res.cookie('access_token', token, cookieOptions(60 * 60 * 1000)); // 1 saat
+    res.cookie('refresh_token', refreshToken, refreshCookieOptions(7 * 24 * 60 * 60 * 1000)); // 7 gün
+
+    await createAuditLog({
+      userId: user.id,
+      userEmail: user.email,
+      action: 'LOGIN',
+      resource: 'User',
+      resourceId: String(user.id),
+      ipAddress: req.ip,
+      userAgent: req.get('User-Agent')
+    });
 
     res.json({
-      token,
       user: {
         id: user.id,
+        name: user.name,
         email: user.email,
         role: user.role.name,
         profilePhoto: user.profilePhoto,
+        signatureUrl: user.signatureUrl,
         companyId: user.companyId,
         branchId: user.branchId
-      }
+      },
+      accessToken: token,
+      refreshToken,
+      token
     });
   } catch (error) {
     if (error instanceof z.ZodError) {
       return res.status(400).json({ error: error.errors[0].message });
     }
-    console.error('Login error:', error);
+    logger.error('Login error:', error);
     res.status(500).json({ error: 'Sunucu hatası' });
   }
+});
+
+// POST /auth/refresh - Faz 2.4: Token yenileme (cookie veya Bearer header - mobil için)
+app.post('/auth/refresh', async (req, res) => {
+  try {
+    const refreshToken = req.cookies?.refresh_token || (req.headers.authorization?.startsWith('Bearer ') ? req.headers.authorization.slice(7) : null);
+    if (!refreshToken) {
+      return res.status(401).json({ error: 'Refresh token bulunamadı' });
+    }
+
+    const decoded = jwt.verify(refreshToken, JWT_SECRET);
+    if (decoded.type !== 'refresh') {
+      return res.status(401).json({ error: 'Geçersiz token tipi' });
+    }
+
+    const user = await prismaWithPassword.user.findUnique({
+      where: { id: decoded.id },
+      include: { role: true }
+    });
+
+    if (!user) {
+      return res.status(401).json({ error: 'Kullanıcı bulunamadı' });
+    }
+
+    const newAccessToken = generateToken(user);
+
+    res.cookie('access_token', newAccessToken, cookieOptions(60 * 60 * 1000));
+
+    createAuditLog({
+      userId: user.id,
+      userEmail: user.email,
+      action: 'LOGIN',
+      resource: 'User',
+      resourceId: String(user.id),
+      ipAddress: req.ip,
+      userAgent: req.get('User-Agent'),
+      details: 'Token yenilendi'
+    });
+
+    res.json({ message: 'Token yenilendi', accessToken: newAccessToken, token: newAccessToken });
+  } catch (error) {
+    res.clearCookie('access_token', { path: '/' });
+    res.clearCookie('refresh_token', { path: '/auth/refresh' });
+    return res.status(401).json({ error: 'Oturum süresi doldu, tekrar giriş yapın' });
+  }
+});
+
+// POST /auth/logout - Faz 2.5: Çıkış yapma
+app.post('/auth/logout', (req, res) => {
+  // Logout: req.user yok (authenticate yok). Cookie'den token var ama decode etmeden user bilmiyoruz.
+  // Basit LOGOUT: ipAddress ile logla
+  createAuditLog({
+    action: 'LOGOUT',
+    resource: 'User',
+    ipAddress: req.ip,
+    userAgent: req.get('User-Agent')
+  });
+  res.clearCookie('access_token', { path: '/' });
+  res.clearCookie('refresh_token', { path: '/auth/refresh' });
+  res.json({ message: 'Çıkış yapıldı' });
 });
 
 // GET /auth/me - Mevcut kullanıcı bilgisi
@@ -213,6 +748,9 @@ app.get('/auth/me', authenticate, async (req, res) => {
     branchId: req.user.branchId
   });
 });
+
+// Uploads - 1.8: Kimlik doğrulamalı erişim
+app.use('/uploads', authenticate, express.static(uploadsDir));
 
 // ============ USERS ENDPOINTS ============
 
@@ -234,6 +772,7 @@ app.get('/users', authenticate, authorize('admin', 'planlamacı'), async (req, r
 
     res.json(users.map(u => ({
       id: u.id,
+      name: u.name,
       email: u.email,
       role: u.role.name,
       profilePhoto: u.profilePhoto,
@@ -242,17 +781,18 @@ app.get('/users', authenticate, authorize('admin', 'planlamacı'), async (req, r
       createdAt: u.createdAt
     })));
   } catch (error) {
-    console.error('Get users error:', error);
+    logger.error('Get users error:', error);
     res.status(500).json({ error: 'Sunucu hatası' });
   }
 });
 
-// POST /users - Yeni kullanıcı oluşturma
-app.post('/users', authenticate, authorize('admin'), async (req, res) => {
+// POST /users - Yeni kullanıcı oluşturma (Faz 2.2 şifre politikası)
+app.post('/users', authenticate, authorize('admin'), writeLimiter, async (req, res) => {
   try {
     const schema = z.object({
+      name: z.string().min(1, 'Ad Soyad gerekli'),
       email: z.string().email('Geçerli bir e-posta adresi girin'),
-      password: z.string().min(6, 'Şifre en az 6 karakter olmalı'),
+      password: passwordSchema,
       role: z.string(),
       companyId: z.number().optional(),
       branchId: z.number().optional()
@@ -272,10 +812,11 @@ app.post('/users', authenticate, authorize('admin'), async (req, res) => {
       return res.status(400).json({ error: 'Bu e-posta adresi zaten kullanılıyor' });
     }
 
-    const hashedPassword = await bcrypt.hash(data.password, 10);
+    const hashedPassword = await bcrypt.hash(data.password, BCRYPT_ROUNDS);
 
     const user = await prisma.user.create({
       data: {
+        name: data.name,
         email: data.email,
         password: hashedPassword,
         roleId: role.id,
@@ -283,6 +824,17 @@ app.post('/users', authenticate, authorize('admin'), async (req, res) => {
         branchId: data.branchId
       },
       include: { role: true }
+    });
+
+    createAuditLog({
+      userId: req.user.id,
+      userEmail: req.user.email,
+      action: 'CREATE',
+      resource: 'User',
+      resourceId: String(user.id),
+      newValue: { id: user.id, email: user.email, role: user.role.name },
+      ipAddress: req.ip,
+      userAgent: req.get('User-Agent')
     });
 
     res.status(201).json({
@@ -294,21 +846,35 @@ app.post('/users', authenticate, authorize('admin'), async (req, res) => {
     if (error instanceof z.ZodError) {
       return res.status(400).json({ error: error.errors[0].message });
     }
-    console.error('Create user error:', error);
+    logger.error('Create user error:', error);
     res.status(500).json({ error: 'Sunucu hatası' });
   }
 });
 
-// DELETE /users/:id - Kullanıcı silme
-app.delete('/users/:id', authenticate, authorize('admin'), async (req, res) => {
+// DELETE /users/:id - Kullanıcı silme (Faz 4.1 validasyon)
+app.delete('/users/:id', authenticate, authorize('admin'), validate(paramsOnlySchema), writeLimiter, async (req, res) => {
   try {
-    const id = parseInt(req.params.id);
+    const { id } = req.validated.params;
 
+    const deletedUser = await prisma.user.findUnique({ where: { id }, include: { role: true } });
     await prisma.user.delete({ where: { id } });
+
+    if (deletedUser) {
+      createAuditLog({
+        userId: req.user.id,
+        userEmail: req.user.email,
+        action: 'DELETE',
+        resource: 'User',
+        resourceId: String(id),
+        oldValue: { id: deletedUser.id, email: deletedUser.email, role: deletedUser.role?.name },
+        ipAddress: req.ip,
+        userAgent: req.get('User-Agent')
+      });
+    }
 
     res.json({ message: 'Kullanıcı silindi' });
   } catch (error) {
-    console.error('Delete user error:', error);
+    logger.error('Delete user error:', error);
     res.status(500).json({ error: 'Sunucu hatası' });
   }
 });
@@ -341,13 +907,13 @@ app.get('/companies', authenticate, authorize('admin', 'planlamacı', 'firma_sah
 
     res.json(companies);
   } catch (error) {
-    console.error('Get companies error:', error);
+    logger.error('Get companies error:', error);
     res.status(500).json({ error: 'Sunucu hatası' });
   }
 });
 
 // POST /companies - Yeni şirket oluşturma
-app.post('/companies', authenticate, authorize('admin'), async (req, res) => {
+app.post('/companies', authenticate, authorize('admin'), writeLimiter, async (req, res) => {
   try {
     const schema = z.object({
       name: z.string().min(1, 'Şirket adı gerekli'),
@@ -362,45 +928,81 @@ app.post('/companies', authenticate, authorize('admin'), async (req, res) => {
       include: { owner: { select: { id: true, email: true } } }
     });
 
+    createAuditLog({
+      userId: req.user.id,
+      userEmail: req.user.email,
+      action: 'CREATE',
+      resource: 'Company',
+      resourceId: String(company.id),
+      newValue: { id: company.id, name: company.name },
+      ipAddress: req.ip,
+      userAgent: req.get('User-Agent')
+    });
+
     res.status(201).json(company);
   } catch (error) {
     if (error instanceof z.ZodError) {
       return res.status(400).json({ error: error.errors[0].message });
     }
-    console.error('Create company error:', error);
+    logger.error('Create company error:', error);
     res.status(500).json({ error: 'Sunucu hatası' });
   }
 });
 
-// PUT /companies/:id - Şirket güncelleme
-app.put('/companies/:id', authenticate, authorize('admin'), async (req, res) => {
+// PUT /companies/:id - Şirket güncelleme (Faz 4.1 validasyon)
+app.put('/companies/:id', authenticate, authorize('admin'), validate(updateCompanySchema), writeLimiter, async (req, res) => {
   try {
-    const id = parseInt(req.params.id);
-    const { name, logoUrl, ownerId } = req.body;
+    const { id } = req.validated.params;
+    const { name, logoUrl, ownerId } = req.validated.body;
 
+    const oldCompany = await prisma.company.findUnique({ where: { id } });
     const company = await prisma.company.update({
       where: { id },
       data: { name, logoUrl, ownerId },
       include: { owner: { select: { id: true, email: true } } }
     });
 
+    createAuditLog({
+      userId: req.user.id,
+      userEmail: req.user.email,
+      action: 'UPDATE',
+      resource: 'Company',
+      resourceId: String(id),
+      oldValue: oldCompany ? { name: oldCompany.name } : null,
+      newValue: { name: company.name, logoUrl: company.logoUrl, ownerId: company.ownerId },
+      ipAddress: req.ip,
+      userAgent: req.get('User-Agent')
+    });
+
     res.json(company);
   } catch (error) {
-    console.error('Update company error:', error);
+    logger.error('Update company error:', error);
     res.status(500).json({ error: 'Sunucu hatası' });
   }
 });
 
-// DELETE /companies/:id - Şirket silme
-app.delete('/companies/:id', authenticate, authorize('admin'), async (req, res) => {
+// DELETE /companies/:id - Şirket silme (Faz 4.1 validasyon)
+app.delete('/companies/:id', authenticate, authorize('admin'), validate(deleteCompanySchema), writeLimiter, async (req, res) => {
   try {
-    const id = parseInt(req.params.id);
+    const { id } = req.validated.params;
 
+    const oldCompany = await prisma.company.findUnique({ where: { id } });
     await prisma.company.delete({ where: { id } });
+
+    createAuditLog({
+      userId: req.user.id,
+      userEmail: req.user.email,
+      action: 'DELETE',
+      resource: 'Company',
+      resourceId: String(id),
+      oldValue: oldCompany ? { id: oldCompany.id, name: oldCompany.name } : null,
+      ipAddress: req.ip,
+      userAgent: req.get('User-Agent')
+    });
 
     res.json({ message: 'Şirket silindi' });
   } catch (error) {
-    console.error('Delete company error:', error);
+    logger.error('Delete company error:', error);
     res.status(500).json({ error: 'Sunucu hatası' });
   }
 });
@@ -428,13 +1030,13 @@ app.get('/regions', authenticate, authorize('admin', 'planlamacı'), async (req,
 
     res.json(regions);
   } catch (error) {
-    console.error('Get regions error:', error);
+    logger.error('Get regions error:', error);
     res.status(500).json({ error: 'Sunucu hatası' });
   }
 });
 
 // POST /regions - Yeni bölge oluşturma
-app.post('/regions', authenticate, authorize('admin'), async (req, res) => {
+app.post('/regions', authenticate, authorize('admin'), writeLimiter, async (req, res) => {
   try {
     const schema = z.object({
       name: z.string().min(1, 'Bölge adı gerekli'),
@@ -448,26 +1050,49 @@ app.post('/regions', authenticate, authorize('admin'), async (req, res) => {
       include: { company: true }
     });
 
+    createAuditLog({
+      userId: req.user.id,
+      userEmail: req.user.email,
+      action: 'CREATE',
+      resource: 'Region',
+      resourceId: String(region.id),
+      newValue: { id: region.id, name: region.name, companyId: region.companyId },
+      ipAddress: req.ip,
+      userAgent: req.get('User-Agent')
+    });
+
     res.status(201).json(region);
   } catch (error) {
     if (error instanceof z.ZodError) {
       return res.status(400).json({ error: error.errors[0].message });
     }
-    console.error('Create region error:', error);
+    logger.error('Create region error:', error);
     res.status(500).json({ error: 'Sunucu hatası' });
   }
 });
 
-// DELETE /regions/:id - Bölge silme
-app.delete('/regions/:id', authenticate, authorize('admin'), async (req, res) => {
+// DELETE /regions/:id - Bölge silme (Faz 4.1 validasyon)
+app.delete('/regions/:id', authenticate, authorize('admin'), validate(paramsOnlySchema), writeLimiter, async (req, res) => {
   try {
-    const id = parseInt(req.params.id);
+    const { id } = req.validated.params;
 
+    const oldRegion = await prisma.region.findUnique({ where: { id } });
     await prisma.region.delete({ where: { id } });
+
+    createAuditLog({
+      userId: req.user.id,
+      userEmail: req.user.email,
+      action: 'DELETE',
+      resource: 'Region',
+      resourceId: String(id),
+      oldValue: oldRegion ? { id: oldRegion.id, name: oldRegion.name } : null,
+      ipAddress: req.ip,
+      userAgent: req.get('User-Agent')
+    });
 
     res.json({ message: 'Bölge silindi' });
   } catch (error) {
-    console.error('Delete region error:', error);
+    logger.error('Delete region error:', error);
     res.status(500).json({ error: 'Sunucu hatası' });
   }
 });
@@ -520,13 +1145,13 @@ app.get('/branches', authenticate, async (req, res) => {
 
     res.json(branches);
   } catch (error) {
-    console.error('Get branches error:', error);
+    logger.error('Get branches error:', error);
     res.status(500).json({ error: 'Sunucu hatası' });
   }
 });
 
 // POST /branches - Yeni şube oluşturma
-app.post('/branches', authenticate, authorize('admin'), async (req, res) => {
+app.post('/branches', authenticate, authorize('admin'), writeLimiter, async (req, res) => {
   try {
     const schema = z.object({
       name: z.string().min(1, 'Şube adı gerekli'),
@@ -548,63 +1173,111 @@ app.post('/branches', authenticate, authorize('admin'), async (req, res) => {
       include: { company: true, region: true }
     });
 
+    createAuditLog({
+      userId: req.user.id,
+      userEmail: req.user.email,
+      action: 'CREATE',
+      resource: 'Branch',
+      resourceId: String(branch.id),
+      newValue: { id: branch.id, name: branch.name, city: branch.city },
+      ipAddress: req.ip,
+      userAgent: req.get('User-Agent')
+    });
+
     res.status(201).json(branch);
   } catch (error) {
     if (error instanceof z.ZodError) {
       return res.status(400).json({ error: error.errors[0].message });
     }
-    console.error('Create branch error:', error);
+    logger.error('Create branch error:', error);
     res.status(500).json({ error: 'Sunucu hatası' });
   }
 });
 
-// PUT /branches/:id - Şube güncelleme
-app.put('/branches/:id', authenticate, authorize('admin'), async (req, res) => {
+// PUT /branches/:id - Şube güncelleme (Faz 4.1 validasyon)
+app.put('/branches/:id', authenticate, authorize('admin'), validate(updateBranchSchema), writeLimiter, async (req, res) => {
   try {
-    const id = parseInt(req.params.id);
-    const { name, city, address, phone, email, regionId, isActive } = req.body;
+    const { id } = req.validated.params;
+    const { name, city, address, phone, email, regionId, isActive } = req.validated.body;
 
+    const oldBranch = await prisma.branch.findUnique({ where: { id } });
     const branch = await prisma.branch.update({
       where: { id },
-      data: { name, city, address, phone, email, regionId, isActive },
+      data: { name, city, address, phone, email: email || null, regionId, isActive },
       include: { company: true, region: true }
+    });
+
+    createAuditLog({
+      userId: req.user.id,
+      userEmail: req.user.email,
+      action: 'UPDATE',
+      resource: 'Branch',
+      resourceId: String(id),
+      oldValue: oldBranch ? { name: oldBranch.name, city: oldBranch.city } : null,
+      newValue: { name: branch.name, city: branch.city },
+      ipAddress: req.ip,
+      userAgent: req.get('User-Agent')
     });
 
     res.json(branch);
   } catch (error) {
-    console.error('Update branch error:', error);
+    logger.error('Update branch error:', error);
     res.status(500).json({ error: 'Sunucu hatası' });
   }
 });
 
-// DELETE /branches/:id - Şube silme
-app.delete('/branches/:id', authenticate, authorize('admin'), async (req, res) => {
+// DELETE /branches/:id - Şube silme (Faz 4.1 validasyon)
+app.delete('/branches/:id', authenticate, authorize('admin'), validate(paramsOnlySchema), writeLimiter, async (req, res) => {
   try {
-    const id = parseInt(req.params.id);
+    const { id } = req.validated.params;
 
+    const oldBranch = await prisma.branch.findUnique({ where: { id } });
     await prisma.branch.delete({ where: { id } });
+
+    createAuditLog({
+      userId: req.user.id,
+      userEmail: req.user.email,
+      action: 'DELETE',
+      resource: 'Branch',
+      resourceId: String(id),
+      oldValue: oldBranch ? { id: oldBranch.id, name: oldBranch.name } : null,
+      ipAddress: req.ip,
+      userAgent: req.get('User-Agent')
+    });
 
     res.json({ message: 'Şube silindi' });
   } catch (error) {
-    console.error('Delete branch error:', error);
+    logger.error('Delete branch error:', error);
     res.status(500).json({ error: 'Sunucu hatası' });
   }
 });
 
-// POST /branches/:id/assign - Denetçi atama
-app.post('/branches/:id/assign', authenticate, authorize('admin', 'planlamacı'), async (req, res) => {
+// POST /branches/:id/assign - Denetçi atama (Faz 4.1 validasyon)
+app.post('/branches/:id/assign', authenticate, authorize('admin', 'planlamacı'), validate(assignBranchSchema), writeLimiter, async (req, res) => {
   try {
-    const branchId = parseInt(req.params.id);
-    const { userId } = req.body;
+    const { id: branchId } = req.validated.params;
+    const { userId } = req.validated.body;
 
     const assignment = await prisma.branchAssignment.create({
       data: { branchId, userId },
       include: { branch: true, user: { select: { id: true, email: true } } }
     });
 
+    createAuditLog({
+      userId: req.user.id,
+      userEmail: req.user.email,
+      action: 'UPDATE',
+      resource: 'Branch',
+      resourceId: String(branchId),
+      newValue: { branchId, userId },
+      ipAddress: req.ip,
+      userAgent: req.get('User-Agent'),
+      details: 'Şube ataması'
+    });
+
     res.status(201).json(assignment);
   } catch (error) {
-    console.error('Assign branch error:', error);
+    logger.error('Assign branch error:', error);
     res.status(500).json({ error: 'Sunucu hatası' });
   }
 });
@@ -625,13 +1298,13 @@ app.get('/categories', authenticate, async (req, res) => {
 
     res.json(categories);
   } catch (error) {
-    console.error('Get categories error:', error);
+    logger.error('Get categories error:', error);
     res.status(500).json({ error: 'Sunucu hatası' });
   }
 });
 
 // POST /categories - Yeni kategori oluşturma
-app.post('/categories', authenticate, authorize('admin'), async (req, res) => {
+app.post('/categories', authenticate, authorize('admin'), writeLimiter, async (req, res) => {
   try {
     const schema = z.object({
       title: z.string().min(1, 'Kategori başlığı gerekli')
@@ -644,26 +1317,49 @@ app.post('/categories', authenticate, authorize('admin'), async (req, res) => {
       include: { questions: true }
     });
 
+    createAuditLog({
+      userId: req.user.id,
+      userEmail: req.user.email,
+      action: 'CREATE',
+      resource: 'Category',
+      resourceId: String(category.id),
+      newValue: { id: category.id, title: category.title },
+      ipAddress: req.ip,
+      userAgent: req.get('User-Agent')
+    });
+
     res.status(201).json(category);
   } catch (error) {
     if (error instanceof z.ZodError) {
       return res.status(400).json({ error: error.errors[0].message });
     }
-    console.error('Create category error:', error);
+    logger.error('Create category error:', error);
     res.status(500).json({ error: 'Sunucu hatası' });
   }
 });
 
-// DELETE /categories/:id - Kategori silme
-app.delete('/categories/:id', authenticate, authorize('admin'), async (req, res) => {
+// DELETE /categories/:id - Kategori silme (Faz 4.1 validasyon)
+app.delete('/categories/:id', authenticate, authorize('admin'), validate(paramsOnlySchema), writeLimiter, async (req, res) => {
   try {
-    const id = parseInt(req.params.id);
+    const { id } = req.validated.params;
 
+    const oldCategory = await prisma.category.findUnique({ where: { id } });
     await prisma.category.delete({ where: { id } });
+
+    createAuditLog({
+      userId: req.user.id,
+      userEmail: req.user.email,
+      action: 'DELETE',
+      resource: 'Category',
+      resourceId: String(id),
+      oldValue: oldCategory ? { id: oldCategory.id, title: oldCategory.title } : null,
+      ipAddress: req.ip,
+      userAgent: req.get('User-Agent')
+    });
 
     res.json({ message: 'Kategori silindi' });
   } catch (error) {
-    console.error('Delete category error:', error);
+    logger.error('Delete category error:', error);
     res.status(500).json({ error: 'Sunucu hatası' });
   }
 });
@@ -671,7 +1367,7 @@ app.delete('/categories/:id', authenticate, authorize('admin'), async (req, res)
 // ============ QUESTIONS ENDPOINTS ============
 
 // POST /questions - Yeni soru oluşturma
-app.post('/questions', authenticate, authorize('admin'), async (req, res) => {
+app.post('/questions', authenticate, authorize('admin'), writeLimiter, async (req, res) => {
   try {
     const schema = z.object({
       text: z.string().min(1, 'Soru metni gerekli'),
@@ -689,26 +1385,49 @@ app.post('/questions', authenticate, authorize('admin'), async (req, res) => {
       include: { category: true }
     });
 
+    createAuditLog({
+      userId: req.user.id,
+      userEmail: req.user.email,
+      action: 'CREATE',
+      resource: 'Question',
+      resourceId: String(question.id),
+      newValue: { id: question.id, text: question.text?.substring(0, 50) },
+      ipAddress: req.ip,
+      userAgent: req.get('User-Agent')
+    });
+
     res.status(201).json(question);
   } catch (error) {
     if (error instanceof z.ZodError) {
       return res.status(400).json({ error: error.errors[0].message });
     }
-    console.error('Create question error:', error);
+    logger.error('Create question error:', error);
     res.status(500).json({ error: 'Sunucu hatası' });
   }
 });
 
-// DELETE /questions/:id - Soru silme
-app.delete('/questions/:id', authenticate, authorize('admin'), async (req, res) => {
+// DELETE /questions/:id - Soru silme (Faz 4.1 validasyon)
+app.delete('/questions/:id', authenticate, authorize('admin'), validate(paramsOnlySchema), writeLimiter, async (req, res) => {
   try {
-    const id = parseInt(req.params.id);
+    const { id } = req.validated.params;
 
+    const oldQuestion = await prisma.question.findUnique({ where: { id } });
     await prisma.question.delete({ where: { id } });
+
+    createAuditLog({
+      userId: req.user.id,
+      userEmail: req.user.email,
+      action: 'DELETE',
+      resource: 'Question',
+      resourceId: String(id),
+      oldValue: oldQuestion ? { id: oldQuestion.id } : null,
+      ipAddress: req.ip,
+      userAgent: req.get('User-Agent')
+    });
 
     res.json({ message: 'Soru silindi' });
   } catch (error) {
-    console.error('Delete question error:', error);
+    logger.error('Delete question error:', error);
     res.status(500).json({ error: 'Sunucu hatası' });
   }
 });
@@ -718,35 +1437,61 @@ app.delete('/questions/:id', authenticate, authorize('admin'), async (req, res) 
 // GET /audits - Denetim listesi
 app.get('/audits', authenticate, async (req, res) => {
   try {
-    const { status } = req.query;
+    const { status, startDate, endDate, companyId, userId, branchId, search } = req.query;
 
     let where = { deletedAt: null };
 
-    // Field kullanıcı sadece kendi denetimlerini görür
+    // Rol bazlı kapsam: field, firma_sahibi, sube_kullanici sadece kendi verilerini görür
     if (req.user.role.name === 'field') {
       where.userId = req.user.id;
     }
-
-    // Firma sahibi sadece kendi şirketinin denetimlerini görür
-    if (req.user.role.name === 'firma_sahibi') {
-      if (req.user.companyId) {
-        where.companyId = req.user.companyId;
-      }
+    if (req.user.role.name === 'firma_sahibi' && req.user.companyId) {
+      where.companyId = req.user.companyId;
     }
-
-    // Şube kullanıcısı sadece kendi şubesinin denetimlerini görür
     if (req.user.role.name === 'sube_kullanici' && req.user.branchId) {
       where.branchId = req.user.branchId;
+    }
+
+    // companyId, userId, branchId sadece yetkili roller (admin, planlamacı, gözden_geçiren) için uygulanır
+    const PRIVILEGED_AUDIT_ROLES = ['admin', 'planlamacı', 'gözden_geçiren'];
+    const canFilterByScope = PRIVILEGED_AUDIT_ROLES.includes(req.user.role.name);
+
+    if (companyId && canFilterByScope) {
+      const cid = parseInt(companyId, 10);
+      if (!isNaN(cid)) where.companyId = cid;
+    }
+    if (userId && canFilterByScope && typeof userId === 'string' && userId.trim()) {
+      where.userId = userId.trim();
+    }
+    if (branchId && canFilterByScope) {
+      const bid = parseInt(branchId, 10);
+      if (!isNaN(bid)) where.branchId = bid;
     }
 
     if (status) {
       where.status = status;
     }
 
+    if (search && typeof search === 'string' && search.trim()) {
+      const s = search.trim();
+      where.OR = [
+        { title: { contains: s } },
+        { id: { contains: s } },
+        { user: { email: { contains: s } } },
+        { branch: { name: { contains: s } } }
+      ];
+    }
+
+    if (startDate || endDate) {
+      where.createdAt = {};
+      if (startDate) where.createdAt.gte = new Date(startDate);
+      if (endDate) where.createdAt.lte = new Date(endDate + 'T23:59:59.999Z');
+    }
+
     const audits = await prisma.audit.findMany({
       where,
       include: {
-        user: { select: { id: true, email: true } },
+        user: { select: { id: true, email: true, name: true, profilePhoto: true } },
         reviewer: { select: { id: true, email: true } },
         branch: { include: { company: true } },
         company: true,
@@ -762,6 +1507,7 @@ app.get('/audits', authenticate, async (req, res) => {
       const score = calculateScore(audit.answers, questions);
       return {
         id: audit.id,
+        userId: audit.userId,
         title: audit.title || `Denetim #${audit.id}`,
         status: audit.status,
         createdAt: audit.createdAt,
@@ -775,15 +1521,15 @@ app.get('/audits', authenticate, async (req, res) => {
 
     res.json(result);
   } catch (error) {
-    console.error('Get audits error:', error);
+    logger.error('Get audits error:', error);
     res.status(500).json({ error: 'Sunucu hatası' });
   }
 });
 
-// GET /audits/:id - Denetim detayı
-app.get('/audits/:id', authenticate, async (req, res) => {
+// GET /audits/:id - Denetim detayı (Faz 4.1 validasyon)
+app.get('/audits/:id', authenticate, validate(auditParamsSchema), async (req, res) => {
   try {
-    const id = parseInt(req.params.id);
+    const { id } = req.validated.params;
 
     const audit = await prisma.audit.findUnique({
       where: { id },
@@ -819,17 +1565,17 @@ app.get('/audits/:id', authenticate, async (req, res) => {
 
     res.json({ audit, score });
   } catch (error) {
-    console.error('Get audit error:', error);
+    logger.error('Get audit error:', error);
     res.status(500).json({ error: 'Sunucu hatası' });
   }
 });
 
 // POST /audits - Yeni denetim oluşturma ve denetçiye atama
 // Sadece admin/planlamacı denetim oluşturabilir ve bir denetçiye (field) atar
-app.post('/audits', authenticate, authorize('admin', 'planlamacı'), async (req, res) => {
+app.post('/audits', authenticate, authorize('admin', 'planlamacı'), writeLimiter, async (req, res) => {
   try {
     const schema = z.object({
-      userId: z.number({ required_error: 'Denetçi ID gerekli' }), // Atanacak denetçi (field)
+      userId: z.string({ required_error: 'Denetçi ID gerekli' }).uuid('Geçerli denetçi UUID gerekli'), // Atanacak denetçi (field)
       branchId: z.number({ required_error: 'Şube ID gerekli' }),
       title: z.string().optional(),
       scheduledDate: z.string().optional() // ISO date string
@@ -884,20 +1630,31 @@ app.post('/audits', authenticate, authorize('admin', 'planlamacı'), async (req,
       }
     });
 
+    createAuditLog({
+      userId: req.user.id,
+      userEmail: req.user.email,
+      action: 'CREATE',
+      resource: 'Audit',
+      resourceId: String(audit.id),
+      newValue: { id: audit.id, title: audit.title, status: audit.status },
+      ipAddress: req.ip,
+      userAgent: req.get('User-Agent')
+    });
+
     res.status(201).json(audit);
   } catch (error) {
     if (error instanceof z.ZodError) {
       return res.status(400).json({ error: error.errors[0].message });
     }
-    console.error('Create audit error:', error);
+    logger.error('Create audit error:', error);
     res.status(500).json({ error: 'Sunucu hatası' });
   }
 });
 
-// POST /audits/:id/start - Denetçi denetimi başlatır (pending -> draft)
-app.post('/audits/:id/start', authenticate, authorize('field'), async (req, res) => {
+// POST /audits/:id/start - Denetçi denetimi başlatır (pending -> draft) (Faz 4.1 validasyon)
+app.post('/audits/:id/start', authenticate, authorize('field', 'admin'), validate(auditParamsSchema), writeLimiter, async (req, res) => {
   try {
-    const auditId = parseInt(req.params.id);
+    const { id: auditId } = req.validated.params;
 
     const audit = await prisma.audit.findUnique({ where: { id: auditId } });
 
@@ -905,8 +1662,8 @@ app.post('/audits/:id/start', authenticate, authorize('field'), async (req, res)
       return res.status(404).json({ error: 'Denetim bulunamadı' });
     }
 
-    // Sadece atanan denetçi başlatabilir
-    if (audit.userId !== req.user.id) {
+    // Sadece atanan denetçi veya admin başlatabilir
+    if (audit.userId !== req.user.id && req.user.role.name !== 'admin') {
       return res.status(403).json({ error: 'Bu denetim size atanmamış' });
     }
 
@@ -916,24 +1673,38 @@ app.post('/audits/:id/start', authenticate, authorize('field'), async (req, res)
 
     const updated = await prisma.audit.update({
       where: { id: auditId },
-      data: { status: 'draft' },
+      data: { status: 'draft', startedAt: new Date() },
       include: {
         user: { select: { id: true, email: true } },
         branch: { include: { company: true } }
       }
     });
 
+    createAuditLog({
+      userId: req.user.id,
+      userEmail: req.user.email,
+      action: 'UPDATE',
+      resource: 'Audit',
+      resourceId: String(auditId),
+      oldValue: { status: audit.status },
+      newValue: { status: 'draft' },
+      ipAddress: req.ip,
+      userAgent: req.get('User-Agent'),
+      details: 'Denetim başlatıldı'
+    });
+
     res.json(updated);
   } catch (error) {
-    console.error('Start audit error:', error);
+    logger.error('Start audit error:', error);
     res.status(500).json({ error: 'Sunucu hatası' });
   }
 });
 
-// POST /audits/:id/answers - Cevap kaydetme
-app.post('/audits/:id/answers', authenticate, async (req, res) => {
+// POST /audits/:id/answers - Cevap kaydetme (Faz 4.1 validasyon)
+app.post('/audits/:id/answers', authenticate, validate(auditAnswersSchema), writeLimiter, async (req, res) => {
   try {
-    const auditId = parseInt(req.params.id);
+    const { id: auditId } = req.validated.params;
+    const { items } = req.validated.body;
 
     const audit = await prisma.audit.findUnique({ where: { id: auditId } });
 
@@ -950,8 +1721,6 @@ app.post('/audits/:id/answers', authenticate, async (req, res) => {
       return res.status(400).json({ error: 'Bu denetim düzenlenemez' });
     }
 
-    const { items } = req.body;
-
     // Cevapları upsert et
     for (const item of items) {
       await prisma.answer.upsert({
@@ -963,15 +1732,15 @@ app.post('/audits/:id/answers', authenticate, async (req, res) => {
 
     res.json({ message: 'Cevaplar kaydedildi' });
   } catch (error) {
-    console.error('Save answers error:', error);
+    logger.error('Save answers error:', error);
     res.status(500).json({ error: 'Sunucu hatası' });
   }
 });
 
-// POST /audits/:id/photos - Fotoğraf yükleme
-app.post('/audits/:id/photos', authenticate, upload.single('file'), async (req, res) => {
+// POST /audits/:id/photos - Fotoğraf yükleme (1.5b sıkıştırma, 1.5c magic bytes) (Faz 4.5 uploadLimiter)
+app.post('/audits/:id/photos', authenticate, uploadLimiter, validate(auditParamsSchema), uploadImagesOnly.single('file'), async (req, res) => {
   try {
-    const auditId = parseInt(req.params.id);
+    const { id: auditId } = req.validated.params;
     const questionId = req.body.questionId ? parseInt(req.body.questionId) : null;
 
     const audit = await prisma.audit.findUnique({ where: { id: auditId } });
@@ -984,7 +1753,6 @@ app.post('/audits/:id/photos', authenticate, upload.single('file'), async (req, 
       return res.status(403).json({ error: 'Bu işlem için yetkiniz yok' });
     }
 
-    // Status kontrolü: sadece draft veya revision_requested durumunda fotoğraf yüklenebilir
     if (!['draft', 'revision_requested'].includes(audit.status)) {
       return res.status(400).json({ error: 'Bu denetim durumunda fotoğraf yüklenemez' });
     }
@@ -993,25 +1761,37 @@ app.post('/audits/:id/photos', authenticate, upload.single('file'), async (req, 
       return res.status(400).json({ error: 'Dosya gerekli' });
     }
 
+    const filePath = path.join(uploadsDir, req.file.filename);
+    if (!checkMagicBytes(filePath, req.file.mimetype)) {
+      fs.unlinkSync(filePath);
+      return res.status(400).json({ error: 'Dosya içeriği bildirilen formatla uyuşmuyor' });
+    }
+
+    const compressedPath = await compressImage(filePath, { maxWidth: 1920, quality: 80, format: 'jpeg' });
+    const filename = path.basename(compressedPath);
+
     const photo = await prisma.photo.create({
       data: {
         auditId,
         questionId,
-        url: `/uploads/${req.file.filename}`
+        url: `/uploads/${filename}`
       }
     });
 
     res.status(201).json(photo);
   } catch (error) {
-    console.error('Upload photo error:', error);
+    if (req.file && req.file.filename) {
+      try { fs.unlinkSync(path.join(uploadsDir, req.file.filename)); } catch (_) {}
+    }
+    logger.error('Upload photo error:', error);
     res.status(500).json({ error: 'Sunucu hatası' });
   }
 });
 
-// POST /audits/:id/signature - İmza kaydetme
-app.post('/audits/:id/signature', authenticate, async (req, res) => {
+// POST /audits/:id/signature - İmza kaydetme (Faz 4.1 validasyon)
+app.post('/audits/:id/signature', authenticate, validate(auditParamsSchema), writeLimiter, async (req, res) => {
   try {
-    const auditId = parseInt(req.params.id);
+    const { id: auditId } = req.validated.params;
     const { dataUrl, type } = req.body; // type: 'auditor' veya 'client'
 
     const audit = await prisma.audit.findUnique({ where: { id: auditId } });
@@ -1045,34 +1825,74 @@ app.post('/audits/:id/signature', authenticate, async (req, res) => {
 
     res.json({ url: signatureUrl });
   } catch (error) {
-    console.error('Save signature error:', error);
+    logger.error('Save signature error:', error);
     res.status(500).json({ error: 'Sunucu hatası' });
   }
 });
 
-// POST /audits/:id/signatures - Çift imza yükleme (FormData)
-app.post('/audits/:id/signatures', authenticate, upload.fields([{ name: 'auditorSignature' }, { name: 'clientSignature' }]), async (req, res) => {
+// POST /audits/:id/signature/use-profile - Profil imzasını denetime uygula
+app.post('/audits/:id/signature/use-profile', authenticate, validate(auditParamsSchema), writeLimiter, async (req, res) => {
   try {
-    const auditId = parseInt(req.params.id);
+    const { id: auditId } = req.validated.params;
+
+    if (!req.user.signatureUrl) {
+      return res.status(400).json({ error: 'Profilde kayıtlı imza bulunamadı.' });
+    }
+
+    const audit = await prisma.audit.findUnique({ where: { id: auditId } });
+    if (!audit) {
+      return res.status(404).json({ error: 'Denetim bulunamadı' });
+    }
+    if (audit.userId !== req.user.id && req.user.role.name !== 'admin') {
+      return res.status(403).json({ error: 'Bu işlem için yetkiniz yok' });
+    }
+
+    await prisma.audit.update({
+      where: { id: auditId },
+      data: { auditorSignatureUrl: req.user.signatureUrl }
+    });
+
+    res.json({ url: req.user.signatureUrl });
+  } catch (error) {
+    logger.error('Use profile signature error:', error);
+    res.status(500).json({ error: 'Sunucu hatası' });
+  }
+});
+
+// POST /audits/:id/signatures - Çift imza yükleme (1.5b sıkıştırma, 1.5c magic bytes) (Faz 4.5 uploadLimiter)
+app.post('/audits/:id/signatures', authenticate, uploadLimiter, validate(auditParamsSchema), uploadImagesOnly.fields([{ name: 'auditorSignature' }, { name: 'clientSignature' }]), async (req, res) => {
+  try {
+    const { id: auditId } = req.validated.params;
 
     const audit = await prisma.audit.findUnique({ where: { id: auditId } });
     if (!audit) {
       return res.status(404).json({ error: 'Denetim bulunamadı' });
     }
 
-    // Erişim kontrolü: sadece denetim sahibi veya admin
     if (audit.userId !== req.user.id && req.user.role.name !== 'admin') {
       return res.status(403).json({ error: 'Bu işlem için yetkiniz yok' });
     }
 
     const updateData = {};
 
+    const processSignature = async (file) => {
+      const filePath = path.join(uploadsDir, file.filename);
+      if (!checkMagicBytes(filePath, file.mimetype)) {
+        fs.unlinkSync(filePath);
+        throw new Error('Dosya içeriği bildirilen formatla uyuşmuyor');
+      }
+      await compressImage(filePath, { maxWidth: 800, quality: 95, format: 'png' });
+      return `/uploads/${path.basename(filePath)}`;
+    };
+
     if (req.files['auditorSignature']) {
-      updateData.auditorSignatureUrl = `/uploads/${req.files['auditorSignature'][0].filename}`;
+      const f = req.files['auditorSignature'][0];
+      updateData.auditorSignatureUrl = await processSignature(f);
     }
 
     if (req.files['clientSignature']) {
-      updateData.clientSignatureUrl = `/uploads/${req.files['clientSignature'][0].filename}`;
+      const f = req.files['clientSignature'][0];
+      updateData.clientSignatureUrl = await processSignature(f);
     }
 
     if (Object.keys(updateData).length > 0) {
@@ -1084,15 +1904,22 @@ app.post('/audits/:id/signatures', authenticate, upload.fields([{ name: 'auditor
 
     res.json({ message: 'İmzalar kaydedildi', urls: updateData });
   } catch (error) {
-    console.error('Save signatures error:', error);
-    res.status(500).json({ error: 'Sunucu hatası' });
+    if (req.files) {
+      for (const key of ['auditorSignature', 'clientSignature']) {
+        if (req.files[key]) {
+          try { fs.unlinkSync(path.join(uploadsDir, req.files[key][0].filename)); } catch (_) {}
+        }
+      }
+    }
+    logger.error('Save signatures error:', error);
+    res.status(error.message?.includes('uyuşmuyor') ? 400 : 500).json({ error: error.message || 'Sunucu hatası' });
   }
 });
 
-// POST /audits/:id/submit - Denetimi gönderme
-app.post('/audits/:id/submit', authenticate, async (req, res) => {
+// POST /audits/:id/submit - Denetimi gönderme (Faz 4.1 validasyon)
+app.post('/audits/:id/submit', authenticate, validate(auditParamsSchema), writeLimiter, async (req, res) => {
   try {
-    const auditId = parseInt(req.params.id);
+    const { id: auditId } = req.validated.params;
 
     const audit = await prisma.audit.findUnique({ where: { id: auditId } });
 
@@ -1104,23 +1931,45 @@ app.post('/audits/:id/submit', authenticate, async (req, res) => {
       return res.status(403).json({ error: 'Bu işlem için yetkiniz yok' });
     }
 
+    if (!audit.auditorSignatureUrl || !audit.clientSignatureUrl) {
+      return res.status(400).json({ error: 'Denetim gönderilemez: Her iki imza da gerekli.' });
+    }
+
+    const schema = z.object({
+      authorizedPerson: z.string().min(1, 'Karşı taraf adı soyadı zorunludur.').trim()
+    });
+    const { authorizedPerson } = schema.parse(req.body);
+
     await prisma.audit.update({
       where: { id: auditId },
-      data: { status: 'submitted' }
+      data: { status: 'submitted', authorizedPerson, submittedAt: new Date() }
+    });
+
+    createAuditLog({
+      userId: req.user.id,
+      userEmail: req.user.email,
+      action: 'UPDATE',
+      resource: 'Audit',
+      resourceId: String(auditId),
+      oldValue: { status: audit.status },
+      newValue: { status: 'submitted' },
+      ipAddress: req.ip,
+      userAgent: req.get('User-Agent'),
+      details: 'Denetim gönderildi'
     });
 
     res.json({ message: 'Denetim gönderildi' });
   } catch (error) {
-    console.error('Submit audit error:', error);
+    logger.error('Submit audit error:', error);
     res.status(500).json({ error: 'Sunucu hatası' });
   }
 });
 
-// POST /audits/:id/review - Denetimi onaylama/reddetme
-app.post('/audits/:id/review', authenticate, authorize('admin', 'gözden_geçiren', 'planlamacı'), async (req, res) => {
+// POST /audits/:id/review - Denetimi onaylama/reddetme (Faz 4.1 validasyon)
+app.post('/audits/:id/review', authenticate, authorize('admin', 'gözden_geçiren', 'planlamacı'), validate(auditReviewSchema), writeLimiter, async (req, res) => {
   try {
-    const auditId = parseInt(req.params.id);
-    const { action, note } = req.body; // action: 'approve' veya 'reject'
+    const { id: auditId } = req.validated.params;
+    const { action, note } = req.validated.body;
 
     const audit = await prisma.audit.findUnique({ where: { id: auditId } });
 
@@ -1133,49 +1982,79 @@ app.post('/audits/:id/review', authenticate, authorize('admin', 'gözden_geçire
     }
 
     const newStatus = action === 'approve' ? 'approved' : 'revision_requested';
+    const updateData = {
+      status: newStatus,
+      reviewerId: req.user.id,
+      revisionNote: action === 'reject' ? note : null
+    };
+    if (action === 'approve') {
+      updateData.approvedAt = new Date();
+    } else {
+      updateData.revisionRequestedAt = new Date();
+    }
 
     await prisma.audit.update({
       where: { id: auditId },
-      data: {
-        status: newStatus,
-        reviewerId: req.user.id,
-        revisionNote: action === 'reject' ? note : null
-      }
+      data: updateData
+    });
+
+    createAuditLog({
+      userId: req.user.id,
+      userEmail: req.user.email,
+      action: 'UPDATE',
+      resource: 'Audit',
+      resourceId: String(auditId),
+      oldValue: { status: audit.status },
+      newValue: { status: newStatus, reviewerId: req.user.id },
+      ipAddress: req.ip,
+      userAgent: req.get('User-Agent'),
+      details: action === 'approve' ? 'Denetim onaylandı' : `Revizyon talep edildi: ${note || ''}`
     });
 
     res.json({ message: action === 'approve' ? 'Denetim onaylandı' : 'Revizyon talep edildi' });
   } catch (error) {
-    console.error('Review audit error:', error);
+    logger.error('Review audit error:', error);
     res.status(500).json({ error: 'Sunucu hatası' });
   }
 });
 
-// DELETE /audits/:id - Denetim silme (soft delete)
-app.delete('/audits/:id', authenticate, authorize('admin'), async (req, res) => {
+// DELETE /audits/:id - Denetim silme (soft delete) (Faz 4.1 validasyon)
+app.delete('/audits/:id', authenticate, authorize('admin'), validate(auditParamsSchema), writeLimiter, async (req, res) => {
   try {
-    const id = parseInt(req.params.id);
+    const { id } = req.validated.params;
 
+    const oldAudit = await prisma.audit.findUnique({ where: { id } });
     await prisma.audit.update({
       where: { id },
-      data: { deletedAt: new Date() }
+      data: {
+        deletedAt: new Date(),
+        deletedByUserId: req.user.id
+      }
+    });
+
+    createAuditLog({
+      userId: req.user.id,
+      userEmail: req.user.email,
+      action: 'DELETE',
+      resource: 'Audit',
+      resourceId: String(id),
+      oldValue: oldAudit ? { id: oldAudit.id, title: oldAudit.title, status: oldAudit.status } : null,
+      ipAddress: req.ip,
+      userAgent: req.get('User-Agent')
     });
 
     res.json({ message: 'Denetim silindi' });
   } catch (error) {
-    console.error('Delete audit error:', error);
+    logger.error('Delete audit error:', error);
     res.status(500).json({ error: 'Sunucu hatası' });
   }
 });
 
-// POST /audits/:id/corrective-actions - Şube aksiyon bildirimi gönderme
-app.post('/audits/:id/corrective-actions', authenticate, authorize('sube_kullanici', 'admin'), async (req, res) => {
+// POST /audits/:id/corrective-actions - Şube aksiyon bildirimi gönderme (Faz 4.1 validasyon)
+app.post('/audits/:id/corrective-actions', authenticate, authorize('sube_kullanici', 'admin'), validate(auditCorrectiveActionsSchema), writeLimiter, async (req, res) => {
   try {
-    const auditId = parseInt(req.params.id);
-    const { actions } = req.body; // [{ questionId, description, photoUrls }]
-
-    if (!Array.isArray(actions) || actions.length === 0) {
-      return res.status(400).json({ error: 'Aksiyon listesi boş olamaz' });
-    }
+    const { id: auditId } = req.validated.params;
+    const { actions } = req.validated.body;
 
     const audit = await prisma.audit.findUnique({
       where: { id: auditId },
@@ -1256,7 +2135,7 @@ app.post('/audits/:id/corrective-actions', authenticate, authorize('sube_kullani
 
     res.json({ message: 'Aksiyonlar kaydedildi ve merkeze bildirim gönderildi', count: actions.length });
   } catch (error) {
-    console.error('Corrective actions error:', error);
+    logger.error('Corrective actions error:', error);
     res.status(500).json({ error: 'Sunucu hatası' });
   }
 });
@@ -1297,7 +2176,7 @@ app.get('/stats/overview', authenticate, async (req, res) => {
       completionRate
     });
   } catch (error) {
-    console.error('Get stats error:', error);
+    logger.error('Get stats error:', error);
     res.status(500).json({ error: 'Sunucu hatası' });
   }
 });
@@ -1358,22 +2237,77 @@ app.get('/stats/annual', authenticate, async (req, res) => {
 
     res.json(months);
   } catch (error) {
-    console.error('Get annual stats error:', error);
+    logger.error('Get annual stats error:', error);
     res.status(500).json({ error: 'Sunucu hatası' });
   }
 });
 
 // ============ PROFILE ENDPOINTS ============
 
-// PUT /profile - Profil güncelleme
-app.put('/profile', authenticate, async (req, res) => {
+// POST /profile/signature - Profil imza kaydetme (SVG veya PNG dataUrl)
+app.post('/profile/signature', authenticate, validate(profileSignatureSchema), writeLimiter, async (req, res) => {
   try {
-    const { profilePhoto, signatureUrl } = req.body;
+    const { dataUrl } = req.validated.body;
+    const userId = req.user.id;
+    const filename = `signature-profile-${userId}-${Date.now()}.png`;
+    const filepath = path.join(uploadsDir, filename);
 
+    if (dataUrl.startsWith('data:image/png;base64,')) {
+      const base64Data = dataUrl.replace(/^data:image\/png;base64,/, '');
+      fs.writeFileSync(filepath, base64Data, 'base64');
+    } else if (dataUrl.startsWith('data:image/svg+xml')) {
+      let svgBuffer;
+      if (dataUrl.includes(';base64,')) {
+        const base64Data = dataUrl.replace(/^data:image\/svg\+xml;base64,/, '');
+        svgBuffer = Buffer.from(base64Data, 'base64');
+      } else {
+        const svgPart = dataUrl.replace(/^data:image\/svg\+xml,/, '');
+        const decoded = decodeURIComponent(svgPart);
+        svgBuffer = Buffer.from(decoded, 'utf8');
+      }
+      await sharp(svgBuffer)
+        .png()
+        .toFile(filepath);
+    } else {
+      return res.status(400).json({ error: 'Sadece PNG veya SVG formatı desteklenir' });
+    }
+
+    const signatureUrl = `/uploads/${filename}`;
+
+    await prisma.user.update({
+      where: { id: userId },
+      data: { signatureUrl }
+    });
+
+    res.json({ url: signatureUrl, signatureUrl });
+  } catch (error) {
+    logger.error('Save profile signature error:', error);
+    res.status(500).json({ error: 'Sunucu hatası' });
+  }
+});
+
+// PUT /profile - Profil güncelleme (Faz 4.1 validasyon)
+app.put('/profile', authenticate, validate(profileUpdateSchema), async (req, res) => {
+  try {
+    const { profilePhoto, signatureUrl } = req.validated.body;
+
+    const oldUser = await prisma.user.findUnique({ where: { id: req.user.id } });
     const user = await prisma.user.update({
       where: { id: req.user.id },
       data: { profilePhoto, signatureUrl },
       include: { role: true }
+    });
+
+    createAuditLog({
+      userId: req.user.id,
+      userEmail: req.user.email,
+      action: 'UPDATE',
+      resource: 'Profile',
+      resourceId: String(req.user.id),
+      oldValue: oldUser ? { profilePhoto: oldUser.profilePhoto } : null,
+      newValue: { profilePhoto: user.profilePhoto },
+      ipAddress: req.ip,
+      userAgent: req.get('User-Agent')
     });
 
     res.json({
@@ -1384,49 +2318,89 @@ app.put('/profile', authenticate, async (req, res) => {
       signatureUrl: user.signatureUrl
     });
   } catch (error) {
-    console.error('Update profile error:', error);
+    logger.error('Update profile error:', error);
     res.status(500).json({ error: 'Sunucu hatası' });
   }
 });
 
-// PUT /profile/password - Şifre değiştirme
+// PUT /profile/password - Şifre değiştirme (Faz 2.2 şifre politikası)
 app.put('/profile/password', authenticate, async (req, res) => {
   try {
-    const { currentPassword, newPassword } = req.body;
+    const schema = z.object({
+      currentPassword: z.string().min(1, 'Mevcut şifre gerekli'),
+      newPassword: passwordSchema
+    });
+    const { currentPassword, newPassword } = schema.parse(req.body);
 
-    const user = await prisma.user.findUnique({ where: { id: req.user.id } });
+    const user = await prismaWithPassword.user.findUnique({ where: { id: req.user.id } });
 
     const isValid = await bcrypt.compare(currentPassword, user.password);
     if (!isValid) {
       return res.status(400).json({ error: 'Mevcut şifre hatalı' });
     }
 
-    const hashedPassword = await bcrypt.hash(newPassword, 10);
+    const hashedPassword = await bcrypt.hash(newPassword, BCRYPT_ROUNDS);
 
     await prisma.user.update({
       where: { id: req.user.id },
       data: { password: hashedPassword }
     });
 
+    createAuditLog({
+      userId: req.user.id,
+      userEmail: req.user.email,
+      action: 'UPDATE',
+      resource: 'Profile',
+      resourceId: String(req.user.id),
+      ipAddress: req.ip,
+      userAgent: req.get('User-Agent'),
+      details: 'Şifre değiştirildi'
+    });
+
     res.json({ message: 'Şifre değiştirildi' });
   } catch (error) {
-    console.error('Change password error:', error);
+    logger.error('Change password error:', error);
     res.status(500).json({ error: 'Sunucu hatası' });
   }
 });
 
 // ============ FILE UPLOAD ============
 
-// POST /upload - Genel dosya yükleme
-app.post('/upload', authenticate, upload.single('file'), async (req, res) => {
+// POST /upload - Genel dosya yükleme (1.5b, 1.5c - PDF veya resim) (Faz 4.5 uploadLimiter)
+app.post('/upload', authenticate, uploadLimiter, uploadWithPdf.single('file'), async (req, res) => {
   try {
     if (!req.file) {
       return res.status(400).json({ error: 'Dosya gerekli' });
     }
 
-    res.json({ url: `/uploads/${req.file.filename}` });
+    const filePath = path.join(uploadsDir, req.file.filename);
+    if (!checkMagicBytes(filePath, req.file.mimetype)) {
+      fs.unlinkSync(filePath);
+      return res.status(400).json({ error: 'Dosya içeriği bildirilen formatla uyuşmuyor' });
+    }
+
+    let filename = req.file.filename;
+    if (ALLOWED_IMAGE_MIME.includes(req.file.mimetype)) {
+      const compressedPath = await compressImage(filePath, { maxWidth: 1920, quality: 80, format: 'jpeg' });
+      filename = path.basename(compressedPath);
+    }
+
+    createAuditLog({
+      userId: req.user.id,
+      userEmail: req.user.email,
+      action: 'CREATE',
+      resource: 'File',
+      ipAddress: req.ip,
+      userAgent: req.get('User-Agent'),
+      details: filename
+    });
+
+    res.json({ url: `/uploads/${filename}` });
   } catch (error) {
-    console.error('Upload error:', error);
+    if (req.file?.filename) {
+      try { fs.unlinkSync(path.join(uploadsDir, req.file.filename)); } catch (_) {}
+    }
+    logger.error('Upload error:', error);
     res.status(500).json({ error: 'Sunucu hatası' });
   }
 });
@@ -1455,15 +2429,15 @@ app.get('/notifications', authenticate, async (req, res) => {
 
     res.json({ notifications, unreadCount });
   } catch (error) {
-    console.error('Get notifications error:', error);
+    logger.error('Get notifications error:', error);
     res.status(500).json({ error: 'Sunucu hatası' });
   }
 });
 
-// POST /notifications/:id/read - Bildirimi okundu işaretle
-app.post('/notifications/:id/read', authenticate, async (req, res) => {
+// POST /notifications/:id/read - Bildirimi okundu işaretle (Faz 4.1 validasyon)
+app.post('/notifications/:id/read', authenticate, validate(paramsOnlySchema), async (req, res) => {
   try {
-    const id = parseInt(req.params.id);
+    const { id } = req.validated.params;
 
     await prisma.notification.updateMany({
       where: { id, userId: req.user.id },
@@ -1472,7 +2446,7 @@ app.post('/notifications/:id/read', authenticate, async (req, res) => {
 
     res.json({ message: 'Bildirim okundu olarak işaretlendi' });
   } catch (error) {
-    console.error('Mark notification read error:', error);
+    logger.error('Mark notification read error:', error);
     res.status(500).json({ error: 'Sunucu hatası' });
   }
 });
@@ -1487,7 +2461,7 @@ app.post('/notifications/read-all', authenticate, async (req, res) => {
 
     res.json({ message: 'Tüm bildirimler okundu olarak işaretlendi' });
   } catch (error) {
-    console.error('Mark all notifications read error:', error);
+    logger.error('Mark all notifications read error:', error);
     res.status(500).json({ error: 'Sunucu hatası' });
   }
 });
@@ -1501,7 +2475,7 @@ app.get('/corrective-actions', authenticate, async (req, res) => {
 
     const where = {};
     if (status) where.status = status;
-    if (auditId) where.auditId = parseInt(auditId);
+    if (auditId) where.auditId = auditId;
 
     // Rol bazlı filtreleme
     if (req.user.role.name === 'field') {
@@ -1523,15 +2497,15 @@ app.get('/corrective-actions', authenticate, async (req, res) => {
 
     res.json(actions);
   } catch (error) {
-    console.error('Get corrective actions error:', error);
+    logger.error('Get corrective actions error:', error);
     res.status(500).json({ error: 'Sunucu hatası' });
   }
 });
 
-// POST /corrective-actions - Yeni düzeltici faaliyet oluştur
-app.post('/corrective-actions', authenticate, authorize('admin', 'planlamacı', 'gözden_geçiren'), async (req, res) => {
+// POST /corrective-actions - Yeni düzeltici faaliyet oluştur (Faz 4.1 validasyon)
+app.post('/corrective-actions', authenticate, authorize('admin', 'planlamacı', 'gözden_geçiren'), validate(correctiveActionCreateSchema), writeLimiter, async (req, res) => {
   try {
-    const { auditId, questionId, description, assignedTo, dueDate } = req.body;
+    const { auditId, questionId, description, assignedTo, dueDate } = req.validated.body;
 
     const action = await prisma.correctiveAction.create({
       data: {
@@ -1559,18 +2533,29 @@ app.post('/corrective-actions', authenticate, authorize('admin', 'planlamacı', 
       );
     }
 
+    createAuditLog({
+      userId: req.user.id,
+      userEmail: req.user.email,
+      action: 'CREATE',
+      resource: 'CorrectiveAction',
+      resourceId: String(action.id),
+      newValue: { id: action.id, auditId, questionId },
+      ipAddress: req.ip,
+      userAgent: req.get('User-Agent')
+    });
+
     res.status(201).json(action);
   } catch (error) {
-    console.error('Create corrective action error:', error);
+    logger.error('Create corrective action error:', error);
     res.status(500).json({ error: 'Sunucu hatası' });
   }
 });
 
-// PUT /corrective-actions/:id - Düzeltici faaliyeti güncelle
-app.put('/corrective-actions/:id', authenticate, async (req, res) => {
+// PUT /corrective-actions/:id - Düzeltici faaliyeti güncelle (Faz 4.1 validasyon)
+app.put('/corrective-actions/:id', authenticate, validate(correctiveActionUpdateSchema), writeLimiter, async (req, res) => {
   try {
-    const id = parseInt(req.params.id);
-    const { status, closedNote } = req.body;
+    const { id } = req.validated.params;
+    const { status, closedNote } = req.validated.body;
 
     // Erişim kontrolü: sadece admin, planlamacı, gözden_geçiren veya atanan kişi
     const existingAction = await prisma.correctiveAction.findUnique({
@@ -1608,9 +2593,21 @@ app.put('/corrective-actions/:id', authenticate, async (req, res) => {
       }
     });
 
+    createAuditLog({
+      userId: req.user.id,
+      userEmail: req.user.email,
+      action: 'UPDATE',
+      resource: 'CorrectiveAction',
+      resourceId: String(id),
+      oldValue: { status: existingAction.status },
+      newValue: { status: action.status },
+      ipAddress: req.ip,
+      userAgent: req.get('User-Agent')
+    });
+
     res.json(action);
   } catch (error) {
-    console.error('Update corrective action error:', error);
+    logger.error('Update corrective action error:', error);
     res.status(500).json({ error: 'Sunucu hatası' });
   }
 });
@@ -1622,10 +2619,10 @@ app.put('/corrective-actions/:id', authenticate, async (req, res) => {
 
 // ============ PDF REPORTS ============
 
-// GET /audits/:id/pdf - Genel PDF rapor (tüm sorular)
-app.get('/audits/:id/pdf', authenticate, async (req, res) => {
+// GET /audits/:id/pdf - Genel PDF rapor (tüm sorular) (Faz 4.1 validasyon)
+app.get('/audits/:id/pdf', authenticate, validate(auditParamsSchema), async (req, res) => {
   try {
-    const auditId = parseInt(req.params.id);
+    const { id: auditId } = req.validated.params;
 
     const audit = await prisma.audit.findUnique({
       where: { id: auditId },
@@ -1717,15 +2714,15 @@ app.get('/audits/:id/pdf', authenticate, async (req, res) => {
 
     doc.end();
   } catch (error) {
-    console.error('Generate PDF error:', error);
+    logger.error('Generate PDF error:', error);
     res.status(500).json({ error: 'PDF oluşturulamadı' });
   }
 });
 
-// GET /audits/:id/pdf-nonconformity - Uygunsuzluk raporu (sadece UD cevaplar)
-app.get('/audits/:id/pdf-nonconformity', authenticate, async (req, res) => {
+// GET /audits/:id/pdf-nonconformity - Uygunsuzluk raporu (sadece UD cevaplar) (Faz 4.1 validasyon)
+app.get('/audits/:id/pdf-nonconformity', authenticate, validate(auditParamsSchema), async (req, res) => {
   try {
-    const auditId = parseInt(req.params.id);
+    const { id: auditId } = req.validated.params;
 
     const audit = await prisma.audit.findUnique({
       where: { id: auditId },
@@ -1799,15 +2796,15 @@ app.get('/audits/:id/pdf-nonconformity', authenticate, async (req, res) => {
 
     doc.end();
   } catch (error) {
-    console.error('Generate PDF nonconformity error:', error);
+    logger.error('Generate PDF nonconformity error:', error);
     res.status(500).json({ error: 'PDF oluşturulamadı' });
   }
 });
 
-// GET /stats/branch/:id - Şube bazlı istatistikler
-app.get('/stats/branch/:id', authenticate, async (req, res) => {
+// GET /stats/branch/:id - Şube bazlı istatistikler (Faz 4.1 validasyon)
+app.get('/stats/branch/:id', authenticate, validate(paramsOnlySchema), async (req, res) => {
   try {
-    const branchId = parseInt(req.params.id);
+    const { id: branchId } = req.validated.params;
 
     const branch = await prisma.branch.findUnique({
       where: { id: branchId },
@@ -1878,13 +2875,80 @@ app.get('/stats/branch/:id', authenticate, async (req, res) => {
       audits: auditStats
     });
   } catch (error) {
-    console.error('Branch stats error:', error);
+    logger.error('Branch stats error:', error);
     res.status(500).json({ error: 'Sunucu hatası' });
   }
 });
 
+// ============ 404 ve Global Error Handler - 1.4 ============
+
+app.use((req, res) => {
+  res.status(404).json({ error: 'İstenen kaynak bulunamadı' });
+});
+
+app.use((err, req, res, next) => {
+  if (err.name === 'ZodError') {
+    return res.status(400).json({
+      error: 'Doğrulama hatası',
+      details: err.errors.map(e => ({ field: e.path.join('.'), message: e.message }))
+    });
+  }
+  if (err.message && err.message.includes('CORS')) {
+    return res.status(403).json({ error: 'Bu kaynak için erişim izniniz yok' });
+  }
+  // Faz 4.4: Prisma hata kodları merkezi işleme
+  if (err.code === 'P2002') {
+    return res.status(409).json({ error: 'Bu kayıt zaten mevcut' });
+  }
+  if (err.code === 'P2025') {
+    return res.status(404).json({ error: 'Kayıt bulunamadı' });
+  }
+  const isProduction = process.env.NODE_ENV === 'production';
+  logger.error('Unhandled error:', err);
+  res.status(err.status || 500).json({
+    error: isProduction ? 'Sunucu hatası' : err.message,
+    ...(isProduction ? {} : { stack: err.stack })
+  });
+});
+
+process.on('uncaughtException', (err) => {
+  console.error('Uncaught Exception:', err);
+  process.exit(1);
+});
+
+process.on('unhandledRejection', (reason) => {
+  console.error('Unhandled Rejection:', reason);
+});
+
 // ============ SERVER START ============
 
-app.listen(PORT, '0.0.0.0', () => {
-  console.log(`🚀 TeftişPro Backend sunucusu http://0.0.0.0:${PORT} adresinde çalışıyor`);
-});
+async function ensureAdminUser() {
+  const count = await prisma.user.count();
+  if (count > 0) return;
+  logger.info('Veritabanında kullanıcı yok, varsayılan admin oluşturuluyor...');
+  let adminRole = await prisma.role.findUnique({ where: { name: 'admin' } });
+  if (!adminRole) {
+    adminRole = await prisma.role.create({ data: { name: 'admin' } });
+  }
+  const hashedPassword = await bcrypt.hash('!Admin123456', 10);
+  await prisma.user.create({
+    data: {
+      name: 'Admin Kullanıcı',
+      email: 'admin@admin.com',
+      password: hashedPassword,
+      roleId: adminRole.id
+    }
+  });
+  logger.info('admin@admin.com / !Admin123456 kullanıcısı oluşturuldu');
+}
+
+ensureAdminUser()
+  .then(() => {
+    app.listen(PORT, '0.0.0.0', () => {
+      console.log(`🚀 TeftişPro Backend sunucusu http://0.0.0.0:${PORT} adresinde çalışıyor`);
+    });
+  })
+  .catch((err) => {
+    console.error('Sunucu başlatma hatası:', err);
+    process.exit(1);
+  });

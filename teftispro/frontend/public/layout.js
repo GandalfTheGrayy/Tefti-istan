@@ -1,7 +1,39 @@
 /* ========================================
    TeftişPro Layout System
    Shared sidebar, header, theme & palette management
+   Faz 2.1: apiFetch helper (credentials, 401 refresh)
    ======================================== */
+
+const API_URL = '/api';
+
+// Faz 2.1: Cookie tabanlı auth - credentials + 401'de refresh dene
+// Faz 3.3: CSRF token - state-changing isteklerde X-CSRF-Token header
+window.apiFetch = async function (url, options = {}) {
+  options.credentials = options.credentials ?? 'include';
+  const method = (options.method || 'GET').toUpperCase();
+  if (['POST', 'PUT', 'DELETE', 'PATCH'].includes(method)) {
+    const csrfToken = document.cookie.split('; ').find(r => r.startsWith('csrf_token='))?.split('=')[1];
+    if (csrfToken) {
+      options.headers = options.headers || {};
+      options.headers['X-CSRF-Token'] = csrfToken;
+    }
+  }
+  const fullUrl = (url.startsWith('http') || url.startsWith('/api')) ? url : API_URL + (url.startsWith('/') ? url : '/' + url);
+  let res = await fetch(fullUrl, options);
+  if (res.status === 401) {
+    const data = await res.json().catch(() => ({}));
+    if (data.code === 'TOKEN_EXPIRED') {
+      const refreshRes = await fetch(API_URL + '/auth/refresh', { method: 'POST', credentials: 'include' });
+      if (refreshRes.ok) {
+        return window.apiFetch(url, options);
+      }
+    }
+    localStorage.removeItem('user');
+    window.location.href = '/public/login.html';
+    return res;
+  }
+  return res;
+};
 
 const LAYOUT = {
     menuItems: [
@@ -19,6 +51,8 @@ const LAYOUT = {
         this.applyTheme();
         this.applyPalette();
         this.applyCSSVarTailwind();
+        // Faz 3.3: CSRF token al (state-changing istekler için)
+        fetch(API_URL + '/auth/csrf-token', { credentials: 'include' }).catch(() => {});
         this.renderSidebar();
         if (!document.body.hasAttribute('data-custom-header')) {
             this.renderHeader();
@@ -84,23 +118,9 @@ const LAYOUT = {
         }
     },
 
+    // Faz 3.5: Tailwind lokal build - config tailwind.config.js'de, runtime config gerekmez
     applyCSSVarTailwind: function () {
-        if (typeof tailwind !== 'undefined') {
-            tailwind.config = {
-                darkMode: 'class',
-                theme: {
-                    extend: {
-                        colors: {
-                            accent: {
-                                DEFAULT: '#10b981', 50: '#ecfdf5', 100: '#d1fae5',
-                                200: '#a7f3d0', 500: '#10b981', 600: '#059669', 700: '#047857'
-                            }
-                        },
-                        fontFamily: { sans: ['Inter', 'system-ui', 'sans-serif'] }
-                    }
-                }
-            };
-        }
+        // Lokal Tailwind build kullanılıyor; accent renkler tailwind.config.js'de tanımlı
     },
 
     // ---------- User ----------
@@ -172,11 +192,11 @@ const LAYOUT = {
                 <div class="px-5 py-3" style="background:var(--bg-hover);border-bottom:1px solid var(--border-color);">
                     <div class="flex items-center gap-3">
                         <div class="w-8 h-8 rounded-full flex items-center justify-center font-bold text-xs" style="background:var(--color-accent-100);color:var(--color-accent-700);">
-                            ${this.getUserInitials()}
+                            ${safeText(this.getUserInitials())}
                         </div>
                         <div class="overflow-hidden flex-1">
-                            <p class="text-sm font-semibold truncate" style="color:var(--text-primary);">${this.getUserName()}</p>
-                            <p class="text-xs truncate capitalize" style="color:var(--text-muted);">${this.getRoleDisplayName(role)}</p>
+                            <p class="text-sm font-semibold truncate" style="color:var(--text-primary);">${safeText(this.getUserName())}</p>
+                            <p class="text-xs truncate capitalize" style="color:var(--text-muted);">${safeText(this.getRoleDisplayName(role))}</p>
                         </div>
                     </div>
                 </div>
@@ -241,7 +261,7 @@ const LAYOUT = {
 
         // Build breadcrumb
         const pageName = document.title.split('-')[0].trim();
-        const breadcrumb = `<div class="tp-breadcrumb mt-0.5"><a href="/public/kontrol_paneli.html">Ana Sayfa</a><span class="separator">/</span><span>${pageName}</span></div>`;
+        const breadcrumb = `<div class="tp-breadcrumb mt-0.5"><a href="/public/kontrol_paneli.html">Ana Sayfa</a><span class="separator">/</span><span>${safeText(pageName)}</span></div>`;
 
         const headerHTML = `
             <header class="sticky top-0 z-30 lg:ml-64 transition-all duration-300 backdrop-blur-md"
@@ -254,7 +274,7 @@ const LAYOUT = {
                             <span class="material-symbols-outlined">menu</span>
                         </button>
                         <div>
-                            <h2 class="text-lg font-bold" style="color:var(--text-primary);">${pageTitle}</h2>
+                            <h2 class="text-lg font-bold" style="color:var(--text-primary);">${safeText(pageTitle)}</h2>
                             ${breadcrumb}
                         </div>
                     </div>
@@ -273,7 +293,7 @@ const LAYOUT = {
                         </button>
                         <a href="/public/profil.html" class="w-9 h-9 rounded-full flex items-center justify-center overflow-hidden transition-all text-sm font-bold"
                            style="background:var(--color-accent-100);color:var(--color-accent-700);">
-                            ${this.getUserInitials()}
+                            ${safeText(this.getUserInitials())}
                         </a>
                     </div>
                 </div>
@@ -326,7 +346,7 @@ const LAYOUT = {
         const icons = { success: 'check_circle', error: 'error', warning: 'warning', info: 'info' };
         const toast = document.createElement('div');
         toast.className = `tp-toast ${type}`;
-        toast.innerHTML = `<span class="material-symbols-outlined" style="font-size:1.25rem;">${icons[type] || 'info'}</span><span>${message}</span>`;
+        toast.innerHTML = `<span class="material-symbols-outlined" style="font-size:1.25rem;">${icons[type] || 'info'}</span><span>${safeText(message)}</span>`;
         container.appendChild(toast);
         setTimeout(() => {
             toast.style.animation = 'toastSlideOut 0.3s ease-in forwards';
@@ -336,7 +356,11 @@ const LAYOUT = {
 };
 
 // ---------- Global Functions ----------
-window.logout = function () {
+// Faz 2.5: Sunucu tarafı logout (cookie temizleme)
+window.logout = async function () {
+    try {
+        await fetch(API_URL + '/auth/logout', { method: 'POST', credentials: 'include' });
+    } catch (_) {}
     localStorage.removeItem('token');
     localStorage.removeItem('user');
     window.location.href = '/public/login.html';

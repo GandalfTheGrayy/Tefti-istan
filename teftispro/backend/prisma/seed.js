@@ -29,23 +29,24 @@ async function main() {
     const firmaSahibiRole = await prisma.role.findUnique({ where: { name: 'firma_sahibi' } });
     const subeKullaniciRole = await prisma.role.findUnique({ where: { name: 'sube_kullanici' } });
 
-    // Kullanıcıları oluştur
+    // Kullanıcıları oluştur (ad soyad formatında)
     const users = [
-        { email: 'admin@demo.local', password: 'Admin123!', roleId: adminRole.id },
-        { email: 'planlama@demo.local', password: 'Plan123!', roleId: planlamaciRole.id },
-        { email: 'saha@demo.local', password: 'Field123!', roleId: fieldRole.id },
-        { email: 'onay@demo.local', password: 'Onay123!', roleId: gozdenGecirenRole.id },
-        { email: 'firma@demo.local', password: 'Firma123!', roleId: firmaSahibiRole.id },
-        { email: 'firma@hdiskender.local', password: 'Firma123!', roleId: firmaSahibiRole.id },
-        { email: 'sube@hdiskender.local', password: 'Sube123!', roleId: subeKullaniciRole.id }
+        { name: 'Ali Yılmaz', email: 'admin@admin.com', password: '!Admin123456', roleId: adminRole.id },
+        { name: 'Ayşe Demir', email: 'planlama@demo.local', password: '!Plan12345!!', roleId: planlamaciRole.id },
+        { name: 'Mehmet Kaya', email: 'saha@demo.local', password: '!Field1234!!', roleId: fieldRole.id },
+        { name: 'Fatma Özkan', email: 'onay@demo.local', password: '!Onay12345!!', roleId: gozdenGecirenRole.id },
+        { name: 'Mustafa Çelik', email: 'firma@demo.local', password: '!Firma1234!!', roleId: firmaSahibiRole.id },
+        { name: 'Hasan Demir', email: 'firma@hdiskender.local', password: '!Firma1234!!', roleId: firmaSahibiRole.id },
+        { name: 'Zeynep Arslan', email: 'sube@hdiskender.local', password: '!Sube12345!!', roleId: subeKullaniciRole.id }
     ];
 
     for (const userData of users) {
         const hashedPassword = await bcrypt.hash(userData.password, 10);
         await prisma.user.upsert({
             where: { email: userData.email },
-            update: {},
+            update: { name: userData.name },
             create: {
+                name: userData.name,
                 email: userData.email,
                 password: hashedPassword,
                 roleId: userData.roleId
@@ -269,13 +270,13 @@ async function main() {
 
     console.log('🎉 Seed verileri başarıyla oluşturuldu!');
     console.log('\n📋 Giriş bilgileri:');
-    console.log('  admin@demo.local / Admin123!');
-    console.log('  planlama@demo.local / Plan123!');
-    console.log('  saha@demo.local / Field123!');
-    console.log('  onay@demo.local / Onay123!');
-    console.log('  firma@demo.local / Firma123!');
-    console.log('  firma@hdiskender.local / Firma123!');
-    console.log('  sube@hdiskender.local / Sube123!');
+    console.log('  admin@admin.com / !Admin123456');
+    console.log('  planlama@demo.local / !Plan12345!!');
+    console.log('  saha@demo.local / !Field1234!!');
+    console.log('  onay@demo.local / !Onay12345!!');
+    console.log('  firma@demo.local / !Firma1234!!');
+    console.log('  firma@hdiskender.local / !Firma1234!!');
+    console.log('  sube@hdiskender.local / !Sube12345!!');
 }
 
 main()

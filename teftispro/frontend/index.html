@@ -5,11 +5,13 @@
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>TeftişPro - Teftiş ve Kalite Kontrol</title>
     <meta name="description" content="TeftişPro - Profesyonel teftiş ve kalite kontrol uygulaması">
+    <link rel="stylesheet" href="/public/tailwind.min.css">
     <link rel="stylesheet" href="/public/styles.css">
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/dompurify/3.1.3/purify.min.js" integrity="sha384-SASP0Us+VO2lmZomWfdXP3ofWT1CyolTWk7JSru4UMryuaBT3woFsLawc75lz1Kn" crossorigin="anonymous"></script>
+    <script src="/public/js/security.js"></script>
     <script src="/public/layout.js"></script>
     <script>
-        const token = localStorage.getItem('token');
-        if (token) {
+        if (LAYOUT.getUser()) {
             window.location.href = '/public/kontrol_paneli.html';
         } else {
             window.location.href = '/public/login.html';
