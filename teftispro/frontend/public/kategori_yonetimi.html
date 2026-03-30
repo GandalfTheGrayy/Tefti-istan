@@ -10,7 +10,9 @@
     <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700&display=swap" rel="stylesheet">
     <link rel="stylesheet"
         href="https://fonts.googleapis.com/css2?family=Material+Symbols+Outlined:opsz,wght,FILL,GRAD@24,400,0,0" />
-    <script src="https://cdn.tailwindcss.com"></script>
+    <link rel="stylesheet" href="/public/tailwind.min.css">
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/dompurify/3.1.3/purify.min.js" integrity="sha384-SASP0Us+VO2lmZomWfdXP3ofWT1CyolTWk7JSru4UMryuaBT3woFsLawc75lz1Kn" crossorigin="anonymous"></script>
+    <script src="/public/js/security.js"></script>
     <link rel="stylesheet" href="/public/styles.css">
     <script src="/public/layout.js"></script>
 </head>
@@ -92,9 +94,7 @@
     </div>
 
     <script>
-        const API_URL = '/api';
-        const token = localStorage.getItem('token');
-        if (!token) window.location.href = '/public/login.html';
+        if (!LAYOUT.getUser()) window.location.href = '/public/login.html';
         // Sayfa bazlı rol kontrolü
         if (!['admin', 'planlamacı'].includes(LAYOUT.getUserRole())) {
             window.location.href = '/public/kontrol_paneli.html';
@@ -102,7 +102,7 @@
         let categories = [], editCategoryId = null, editQuestionId = null;
 
         async function load() {
-            try { const r = await fetch(`${API_URL}/categories`, { headers: { 'Authorization': `Bearer ${token}` } }); categories = await r.json(); render(); populateCategorySelect(); } catch (e) { console.error(e); }
+            try { const r = await apiFetch('/categories'); categories = await r.json(); render(); populateCategorySelect(); } catch (e) { console.error(e); }
             document.getElementById('loadingState').classList.add('hidden');
         }
 
@@ -112,7 +112,7 @@
                     <div class="p-4 flex items-center justify-between" style="border-bottom:1px solid var(--border-color);">
                         <div class="flex items-center gap-3">
                             <div class="tp-stat-icon tp-icon-green"><span class="material-symbols-outlined">folder</span></div>
-                            <div><h3 class="font-semibold" style="color:var(--text-primary);">${cat.title}</h3><p class="text-sm" style="color:var(--text-muted);">${cat.questions?.length || 0} soru</p></div>
+                            <div><h3 class="font-semibold" style="color:var(--text-primary);">${safeText(cat.title)}</h3><p class="text-sm" style="color:var(--text-muted);">${cat.questions?.length || 0} soru</p></div>
                         </div>
                         <div class="flex gap-1">
                             <button onclick="editCategory(${cat.id})" class="tp-btn-ghost"><span class="material-symbols-outlined">edit</span></button>
@@ -124,7 +124,7 @@
                             <div class="p-4 flex items-center gap-4 transition-colors" style="border-bottom:1px solid var(--border-color);"
                                  onmouseover="this.style.background='var(--bg-hover)'" onmouseout="this.style.background=''">
                                 <span class="w-8 h-8 rounded-lg flex items-center justify-center text-sm" style="background:var(--bg-input);color:var(--text-muted);">${q.order || '-'}</span>
-                                <div class="flex-1"><p style="color:var(--text-primary);">${q.text}</p>${q.description ? `<p class="text-sm" style="color:var(--text-muted);">${q.description}</p>` : ''}</div>
+                                <div class="flex-1"><p style="color:var(--text-primary);">${safeText(q.text)}</p>${q.description ? `<p class="text-sm" style="color:var(--text-muted);">${safeText(q.description)}</p>` : ''}</div>
                                 <span class="text-sm" style="color:var(--text-muted);">${q.points}p</span>
                                 <div class="flex gap-1">
                                     <button onclick="editQuestion(${q.id})" class="tp-btn-ghost" style="padding:0.25rem;"><span class="material-symbols-outlined text-lg">edit</span></button>
@@ -137,7 +137,7 @@
             `).join('') || `<div class="tp-empty-state"><span class="material-symbols-outlined">category</span><p>Henüz kategori eklenmedi</p></div>`;
         }
 
-        function populateCategorySelect() { const s = document.getElementById('questionCategory'); s.innerHTML = '<option value="">Seçin...</option>'; categories.forEach(c => s.innerHTML += `<option value="${c.id}">${c.title}</option>`); }
+        function populateCategorySelect() { const s = document.getElementById('questionCategory'); s.innerHTML = '<option value="">Seçin...</option>'; categories.forEach(c => s.innerHTML += `<option value="${c.id}">${safeText(c.title)}</option>`); }
 
         function openCategoryModal() { editCategoryId = null; document.getElementById('categoryModalTitle').textContent = 'Yeni Kategori'; document.getElementById('categoryForm').reset(); document.getElementById('categoryModal').classList.add('active'); }
         function closeCategoryModal() { document.getElementById('categoryModal').classList.remove('active'); }
@@ -146,10 +146,10 @@
         document.getElementById('categoryForm').addEventListener('submit', async (e) => {
             e.preventDefault();
             const data = { title: document.getElementById('categoryTitle').value, description: document.getElementById('categoryDescription').value };
-            try { await fetch(editCategoryId ? `${API_URL}/categories/${editCategoryId}` : `${API_URL}/categories`, { method: editCategoryId ? 'PUT' : 'POST', headers: { 'Authorization': `Bearer ${token}`, 'Content-Type': 'application/json' }, body: JSON.stringify(data) }); closeCategoryModal(); location.reload(); } catch (e) { alert('Hata: ' + e.message); }
+            try { await apiFetch(editCategoryId ? `/categories/${editCategoryId}` : '/categories', { method: editCategoryId ? 'PUT' : 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(data) }); closeCategoryModal(); location.reload(); } catch (e) { alert('Hata: ' + e.message); }
         });
 
-        async function deleteCategory(id) { if (!confirm('Kategoriyi ve tüm sorularını silmek istediğinize emin misiniz?')) return; await fetch(`${API_URL}/categories/${id}`, { method: 'DELETE', headers: { 'Authorization': `Bearer ${token}` } }); location.reload(); }
+        async function deleteCategory(id) { if (!confirm('Kategoriyi ve tüm sorularını silmek istediğinize emin misiniz?')) return; await apiFetch(`/categories/${id}`, { method: 'DELETE' }); location.reload(); }
 
         function openQuestionModal(cid) { editQuestionId = null; document.getElementById('questionModalTitle').textContent = 'Yeni Soru'; document.getElementById('questionForm').reset(); if (cid) document.getElementById('questionCategory').value = cid; document.getElementById('questionModal').classList.add('active'); }
         function closeQuestionModal() { document.getElementById('questionModal').classList.remove('active'); }
@@ -158,10 +158,10 @@
         document.getElementById('questionForm').addEventListener('submit', async (e) => {
             e.preventDefault();
             const data = { categoryId: parseInt(document.getElementById('questionCategory').value), text: document.getElementById('questionText').value, description: document.getElementById('questionDescription').value, points: parseInt(document.getElementById('questionPoints').value), order: parseInt(document.getElementById('questionOrder').value), noteRequired: document.getElementById('questionNoteRequired').checked };
-            try { await fetch(editQuestionId ? `${API_URL}/questions/${editQuestionId}` : `${API_URL}/questions`, { method: editQuestionId ? 'PUT' : 'POST', headers: { 'Authorization': `Bearer ${token}`, 'Content-Type': 'application/json' }, body: JSON.stringify(data) }); closeQuestionModal(); location.reload(); } catch (e) { alert('Hata: ' + e.message); }
+            try { await apiFetch(editQuestionId ? `/questions/${editQuestionId}` : '/questions', { method: editQuestionId ? 'PUT' : 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(data) }); closeQuestionModal(); location.reload(); } catch (e) { alert('Hata: ' + e.message); }
         });
 
-        async function deleteQuestion(id) { if (!confirm('Soruyu silmek istediğinize emin misiniz?')) return; await fetch(`${API_URL}/questions/${id}`, { method: 'DELETE', headers: { 'Authorization': `Bearer ${token}` } }); location.reload(); }
+        async function deleteQuestion(id) { if (!confirm('Soruyu silmek istediğinize emin misiniz?')) return; await apiFetch(`/questions/${id}`, { method: 'DELETE' }); location.reload(); }
 
         load();
     </script>

@@ -6,4 +6,5 @@ build/
 *.db
 Gemini_Generated_Image*
 teftispro/backend/node_modules/
+teftispro/backend/logs/
 teftispro/frontend/node_modules/

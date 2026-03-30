@@ -11,7 +11,9 @@
     <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700&display=swap" rel="stylesheet">
     <link rel="stylesheet"
         href="https://fonts.googleapis.com/css2?family=Material+Symbols+Outlined:opsz,wght,FILL,GRAD@24,400,0,0" />
-    <script src="https://cdn.tailwindcss.com"></script>
+    <link rel="stylesheet" href="/public/tailwind.min.css">
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/dompurify/3.1.3/purify.min.js" integrity="sha384-SASP0Us+VO2lmZomWfdXP3ofWT1CyolTWk7JSru4UMryuaBT3woFsLawc75lz1Kn" crossorigin="anonymous"></script>
+    <script src="/public/js/security.js"></script>
     <link rel="stylesheet" href="/public/styles.css">
     <script src="/public/layout.js"></script>
 </head>
@@ -117,9 +119,7 @@
     </div>
 
     <script>
-        const API_URL = '/api';
-        const token = localStorage.getItem('token');
-        if (!token) window.location.href = '/public/login.html';
+        if (!LAYOUT.getUser()) window.location.href = '/public/login.html';
         // Sayfa bazlı rol kontrolü: sadece field ve admin cevaplama yapabilir
         if (!['admin', 'field'].includes(LAYOUT.getUserRole())) {
             window.location.href = '/public/kontrol_paneli.html';
@@ -135,8 +135,8 @@
         async function loadAudit() {
             try {
                 const [auditRes, catRes] = await Promise.all([
-                    fetch(`${API_URL}/audits/${auditId}`, { headers: { 'Authorization': `Bearer ${token}` } }),
-                    fetch(`${API_URL}/categories`, { headers: { 'Authorization': `Bearer ${token}` } })
+                    apiFetch(`/audits/${auditId}`),
+                    apiFetch('/categories')
                 ]);
                 if (!auditRes.ok) throw new Error('Denetim bulunamadı');
                 const auditData = await auditRes.json();
@@ -144,14 +144,14 @@
                 categories = await catRes.json();
 
                 if (audit.status === 'pending') {
-                    const startRes = await fetch(`${API_URL}/audits/${auditId}/start`, { method: 'POST', headers: { 'Authorization': `Bearer ${token}` } });
+                    const startRes = await apiFetch(`/audits/${auditId}/start`, { method: 'POST' });
                     if (startRes.ok) audit.status = 'draft';
                     else { const e = await startRes.json(); alert(e.error || 'Denetim başlatılamadı'); window.location.href = '/public/kontrol_paneli.html'; return; }
                 }
 
                 audit.answers.forEach(a => { answers[a.questionId] = { value: a.value, note: a.note || '' }; });
 
-                document.getElementById('auditTitle').textContent = audit.title || `Denetim #${audit.id}`;
+                document.getElementById('auditTitle').textContent = audit.title || `Denetim #${audit.id.slice(0, 8)}`;
                 document.getElementById('auditInfo').textContent = audit.branch ? `${audit.branch.name} - ${audit.branch.company?.name || ''}` : 'Şube seçilmedi';
                 document.getElementById('loadingState').classList.add('hidden');
 
@@ -162,8 +162,8 @@
         }
 
         async function loadBranches() {
-            const r = await fetch(`${API_URL}/branches`, { headers: { 'Authorization': `Bearer ${token}` } });
-            if (r.ok) { const branches = await r.json(); const s = document.getElementById('branchSelect'); branches.forEach(b => s.innerHTML += `<option value="${b.id}">${b.name} - ${b.company?.name || ''}</option>`); }
+            const r = await apiFetch('/branches');
+            if (r.ok) { const branches = await r.json(); const s = document.getElementById('branchSelect'); branches.forEach(b => s.innerHTML += `<option value="${b.id}">${safeText(b.name + ' - ' + (b.company?.name || ''))}</option>`); }
         }
 
         async function saveBranch() { const branchId = document.getElementById('branchSelect').value; if (!branchId) return alert('Lütfen bir şube seçin'); document.getElementById('branchSelection').classList.add('hidden'); }
@@ -177,7 +177,7 @@
                         <div class="flex items-center gap-3">
                             <div class="tp-stat-icon tp-icon-green"><span class="material-symbols-outlined">folder</span></div>
                             <div>
-                                <h3 class="font-semibold" style="color:var(--text-primary);">${cat.title}</h3>
+                                <h3 class="font-semibold" style="color:var(--text-primary);">${safeText(cat.title)}</h3>
                                 <p class="text-sm" style="color:var(--text-muted);">${cat.questions.length} soru</p>
                             </div>
                         </div>
@@ -203,8 +203,8 @@
                 <div class="rounded-xl p-4" style="background:var(--bg-input);border:1px solid var(--border-color);" id="question${q.id}">
                     <div class="flex items-start justify-between gap-4 mb-3">
                         <div class="flex-1">
-                            <p style="color:var(--text-primary);">${q.text}</p>
-                            ${q.description ? `<p class="text-sm mt-1" style="color:var(--text-muted);">${q.description}</p>` : ''}
+                            <p style="color:var(--text-primary);">${safeText(q.text)}</p>
+                            ${q.description ? `<p class="text-sm mt-1" style="color:var(--text-muted);">${safeText(q.description)}</p>` : ''}
                         </div>
                         <span class="text-sm" style="color:var(--text-muted);">${q.points} puan</span>
                     </div>
@@ -223,7 +223,7 @@
                         </button>
                     </div>
                     <div id="noteField${q.id}" class="${a.value === 'UD' || q.noteRequired ? '' : 'hidden'}">
-                        <textarea id="note${q.id}" placeholder="Açıklama yazın... ${q.noteRequired || a.value === 'UD' ? '(zorunlu)' : ''}" class="tp-input tp-textarea" rows="2" onchange="saveNote(${q.id})">${a.note}</textarea>
+                        <textarea id="note${q.id}" placeholder="Açıklama yazın... ${q.noteRequired || a.value === 'UD' ? '(zorunlu)' : ''}" class="tp-input tp-textarea" rows="2" onchange="saveNote(${q.id})">${safeText(a.note || '')}</textarea>
                     </div>
                     <div class="flex items-center gap-2 mt-3">
                         <button onclick="openPhotoModal(${q.id})" class="tp-btn tp-btn-secondary text-sm py-1.5 px-3">
@@ -269,7 +269,7 @@
 
         async function saveAnswers() {
             const items = Object.entries(answers).map(([qId, d]) => ({ questionId: parseInt(qId), value: d.value, note: d.note }));
-            try { await fetch(`${API_URL}/audits/${auditId}/answers`, { method: 'POST', headers: { 'Authorization': `Bearer ${token}`, 'Content-Type': 'application/json' }, body: JSON.stringify({ items }) }); } catch (e) { console.error('Save error:', e); }
+            try { await apiFetch(`/audits/${auditId}/answers`, { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ items }) }); } catch (e) { console.error('Save error:', e); }
         }
 
         function openPhotoModal(qId) { currentPhotoQuestionId = qId; document.getElementById('photoModal').classList.add('active'); }
@@ -279,7 +279,7 @@
             const file = document.getElementById('photoInput').files[0]; if (!file) return;
             const fd = new FormData(); fd.append('file', file); if (currentPhotoQuestionId) fd.append('questionId', currentPhotoQuestionId);
             try {
-                const r = await fetch(`${API_URL}/audits/${auditId}/photos`, { method: 'POST', headers: { 'Authorization': `Bearer ${token}` }, body: fd });
+                const r = await apiFetch(`/audits/${auditId}/photos`, { method: 'POST', body: fd });
                 if (r.ok) { const photo = await r.json(); document.getElementById(`photoPreview${currentPhotoQuestionId}`).innerHTML += `<img src="${API_URL}${photo.url}" class="w-10 h-10 rounded-lg object-cover">`; closePhotoModal(); }
             } catch (e) { alert('Fotoğraf yüklenemedi'); }
             document.getElementById('photoInput').value = '';
@@ -329,9 +329,9 @@
                 const fd = new FormData();
                 const b64toBlob = (d) => { const bs = atob(d.split(',')[1]); const ab = new ArrayBuffer(bs.length); const ia = new Uint8Array(ab); for (let i = 0; i < bs.length; i++) ia[i] = bs.charCodeAt(i); return new Blob([ab], { type: 'image/png' }); };
                 fd.append('auditorSignature', b64toBlob(signatures.auditor)); fd.append('clientSignature', b64toBlob(signatures.client));
-                const ur = await fetch(`${API_URL}/audits/${auditId}/signatures`, { method: 'POST', headers: { 'Authorization': `Bearer ${token}` }, body: fd });
+                const ur = await apiFetch(`/audits/${auditId}/signatures`, { method: 'POST', body: fd });
                 if (!ur.ok) throw new Error('İmzalar kaydedilemedi');
-                const sr = await fetch(`${API_URL}/audits/${auditId}/submit`, { method: 'POST', headers: { 'Authorization': `Bearer ${token}`, 'Content-Type': 'application/json' } });
+                const sr = await apiFetch(`/audits/${auditId}/submit`, { method: 'POST', headers: { 'Content-Type': 'application/json' } });
                 if (!sr.ok) throw new Error('Denetim gönderilemedi');
                 alert('Denetim başarıyla tamamlandı!'); window.location.href = '/public/denetim_listesi.html';
             } catch (e) { alert('Bir hata oluştu: ' + e.message); }
