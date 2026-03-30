@@ -1936,7 +1936,7 @@ app.post('/audits/:id/submit', authenticate, validate(auditParamsSchema), writeL
     }
 
     const schema = z.object({
-      authorizedPerson: z.string().min(1, 'Karşı taraf adı soyadı zorunludur.').trim()
+      authorizedPerson: z.string().min(1, 'Şube yetkilisi adı soyadı zorunludur.').trim()
     });
     const { authorizedPerson } = schema.parse(req.body);
 
@@ -2710,7 +2710,7 @@ app.get('/audits/:id/pdf', authenticate, validate(auditParamsSchema), async (req
     doc.moveDown(2);
     doc.fontSize(12).text('İMZALAR', { align: 'center' });
     doc.moveDown();
-    doc.text('Denetçi: ____________________          Karşı Taraf: ____________________');
+    doc.text('Denetçi: ____________________          Şube Yetkilisi: ____________________');
 
     doc.end();
   } catch (error) {
@@ -2790,7 +2790,7 @@ app.get('/audits/:id/pdf-nonconformity', authenticate, validate(auditParamsSchem
     doc.moveDown(2);
     doc.fontSize(12).text('İMZALAR', { align: 'center' });
     doc.moveDown();
-    doc.text('Denetçi: ____________________          Karşı Taraf: ____________________');
+    doc.text('Denetçi: ____________________          Şube Yetkilisi: ____________________');
     doc.moveDown();
     doc.text('Tarih: ____________________');
 

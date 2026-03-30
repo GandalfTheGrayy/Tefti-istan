@@ -40,9 +40,10 @@ const LAYOUT = {
         { title: 'Kontrol Paneli', icon: 'dashboard', path: '/public/kontrol_paneli.html', roles: ['admin', 'field', 'planlamacı', 'gözden_geçiren', 'firma_sahibi', 'sube_kullanici'] },
         { title: 'Denetimler', icon: 'fact_check', path: '/public/denetim_listesi.html', roles: ['admin', 'field', 'planlamacı', 'gözden_geçiren', 'firma_sahibi', 'sube_kullanici'] },
         { title: 'Raporlar', icon: 'bar_chart', path: '/public/raporlar.html', roles: ['admin', 'planlamacı', 'gözden_geçiren', 'firma_sahibi'] },
-        { title: 'Şirketler', icon: 'business', path: '/public/sirket_yonetimi.html', roles: ['admin'] },
-        { title: 'Bölgeler', icon: 'map', path: '/public/bolge_yonetimi.html', roles: ['admin'] },
-        { title: 'Şubeler', icon: 'store', path: '/public/sube_yonetimi.html', roles: ['admin'] },
+        { title: 'Şirketler', icon: 'business', path: '/public/sirket_yonetimi.html', roles: ['admin'], children: [
+            { title: 'Bölgeler', icon: 'map', path: '/public/bolge_yonetimi.html', roles: ['admin'] },
+            { title: 'Şubeler', icon: 'store', path: '/public/sube_yonetimi.html', roles: ['admin'] },
+        ]},
         { title: 'Kategoriler', icon: 'category', path: '/public/kategori_yonetimi.html', roles: ['admin', 'planlamacı'] },
         { title: 'Kullanıcılar', icon: 'group', path: '/public/admin_yonetimi.html', roles: ['admin'] },
     ],
@@ -205,6 +206,40 @@ const LAYOUT = {
                 <nav class="flex-1 overflow-y-auto px-3 py-4 space-y-1">
                     ${this.menuItems.map(item => {
                         if (!item.roles.includes(role)) return '';
+                        if (item.children && item.children.length > 0) {
+                            const childrenHTML = item.children.filter(c => c.roles.includes(role)).map(child => `
+                                <a href="${child.path}" class="menu-link menu-child flex items-center gap-3 px-3 py-2 rounded-lg transition-all group" data-path="${child.path}"
+                                   style="color:var(--text-secondary);padding-left:3rem;font-size:13px;"
+                                   onmouseover="this.style.background='var(--bg-hover)';this.style.color='var(--color-accent)'"
+                                   onmouseout="if(!this.classList.contains('menu-active')){this.style.background='';this.style.color='var(--text-secondary)'}">
+                                    <span class="material-symbols-outlined text-[18px] transition-transform group-hover:scale-110">${child.icon}</span>
+                                    <span class="font-medium">${child.title}</span>
+                                </a>
+                            `).join('');
+                            const isChildActive = item.children.some(c => window.location.pathname.includes(c.path.split('/').pop()));
+                            const isParentActive = window.location.pathname.includes(item.path.split('/').pop());
+                            const isOpen = isChildActive || isParentActive;
+                            return `
+                                <div class="menu-parent-group">
+                                    <div class="flex items-center">
+                                        <a href="${item.path}" class="menu-link flex-1 flex items-center gap-3 px-3 py-2.5 rounded-xl transition-all group" data-path="${item.path}"
+                                           style="color:var(--text-secondary);"
+                                           onmouseover="this.style.background='var(--bg-hover)';this.style.color='var(--color-accent)'"
+                                           onmouseout="if(!this.classList.contains('menu-active')){this.style.background='';this.style.color='var(--text-secondary)'}">
+                                            <span class="material-symbols-outlined text-[22px] transition-transform group-hover:scale-110">${item.icon}</span>
+                                            <span class="font-medium text-[14px]">${item.title}</span>
+                                        </a>
+                                        <button onclick="LAYOUT.toggleSubmenu(this)" class="p-1.5 rounded-lg transition-colors" style="color:var(--text-muted);"
+                                                onmouseover="this.style.background='var(--bg-hover)'" onmouseout="this.style.background=''">
+                                            <span class="material-symbols-outlined text-[18px] transition-transform ${isOpen ? 'rotate-180' : ''}" style="display:block;">expand_more</span>
+                                        </button>
+                                    </div>
+                                    <div class="menu-submenu ${isOpen ? 'open' : ''}" style="overflow:hidden;transition:max-height 0.25s ease;${isOpen ? 'max-height:200px;' : 'max-height:0;'}">
+                                        ${childrenHTML}
+                                    </div>
+                                </div>
+                            `;
+                        }
                         return `
                             <a href="${item.path}" class="menu-link flex items-center gap-3 px-3 py-2.5 rounded-xl transition-all group" data-path="${item.path}"
                                style="color:var(--text-secondary);"
@@ -331,6 +366,24 @@ const LAYOUT = {
             sidebar.classList.add('-translate-x-full');
             sidebar.classList.remove('translate-x-0');
             if (overlay) overlay.classList.add('hidden');
+        }
+    },
+
+    toggleSubmenu: function (btn) {
+        const group = btn.closest('.menu-parent-group');
+        if (!group) return;
+        const submenu = group.querySelector('.menu-submenu');
+        const chevron = btn.querySelector('.material-symbols-outlined');
+        if (!submenu) return;
+        const isOpen = submenu.classList.contains('open');
+        if (isOpen) {
+            submenu.style.maxHeight = '0';
+            submenu.classList.remove('open');
+            chevron.classList.remove('rotate-180');
+        } else {
+            submenu.style.maxHeight = '200px';
+            submenu.classList.add('open');
+            chevron.classList.add('rotate-180');
         }
     },
 

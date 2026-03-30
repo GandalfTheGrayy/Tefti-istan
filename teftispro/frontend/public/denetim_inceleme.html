@@ -186,7 +186,7 @@
     <div id="reportSignModal" class="tp-modal-overlay">
         <div class="tp-modal max-w-lg">
             <h3 class="tp-modal-title mb-2">Uygunsuzluk Raporu İmzası</h3>
-            <p class="text-sm mb-4" style="color:var(--text-muted);">Raporu oluşturmadan önce lütfen karşı taraf
+            <p class="text-sm mb-4" style="color:var(--text-muted);">Raporu oluşturmadan önce lütfen şube yetkilisi
                 imzasını alın.</p>
             <div class="bg-white rounded-xl p-2 mb-4"><canvas id="reportSignCanvas"
                     class="w-full h-48 cursor-crosshair touch-none"></canvas></div>
@@ -269,6 +269,7 @@
             }
         }
         function getAnswerLabel(v) { return { 'U': 'Uygun', 'YP': 'Yarı Puanlı', 'UD': 'Uygun Değil', 'DD': 'Değ. Dışı' }[v] || v; }
+        function getEarnedPoints(a, q) { if (!a || !a.value || a.value === 'DD') return '-'; if (a.value === 'U') return q.points; if (a.value === 'YP') return Math.round(q.points / 2 * 10) / 10; return 0; }
 
         function renderAllAnswers() {
             const container = document.getElementById('tabAll');
@@ -284,7 +285,7 @@
                 return `<div class="p-4 flex items-start gap-4" style="border-bottom:1px solid var(--border-color);">
                             <span class="tp-answer-${a?.value || 'DD'} px-2 py-1 rounded text-xs font-medium">${getAnswerLabel(a?.value || 'DD')}</span>
                             <div class="flex-1"><p style="color:var(--text-primary);">${safeText(q.text)}</p>${a?.note ? `<p class="text-sm mt-1" style="color:var(--text-muted);">${safeText(a.note)}</p>` : ''}</div>
-                            <span class="text-sm" style="color:var(--text-muted);">${q.points}p</span>
+                            <span class="text-sm font-medium" style="color:var(--text-muted);">${getEarnedPoints(a, q)}/${q.points}pn</span>
                         </div>`;
             }).join('')}</div>
                 </div>
@@ -403,7 +404,7 @@
             let fy = doc.lastAutoTable ? doc.lastAutoTable.finalY + 20 : 120;
             if (fy > 250) { doc.addPage(); fy = 40; }
             doc.setDrawColor(209, 213, 219); doc.line(m, fy, pw - m, fy);
-            doc.setFontSize(10); doc.setTextColor(107, 114, 128); doc.text('Denetci Imzasi', m, fy + 10); doc.text('Karsi Taraf Imzasi', pw / 2 + 20, fy + 10);
+            doc.setFontSize(10); doc.setTextColor(107, 114, 128); doc.text('Denetci Imzasi', m, fy + 10); doc.text('Sube Yetkilisi Imzasi', pw / 2 + 20, fy + 10);
             if (audit.auditorSignatureUrl) { try { const img = new Image(); img.src = API_URL + audit.auditorSignatureUrl; doc.addImage(img, 'PNG', m, fy + 15, 40, 20); } catch (e) { } }
             if (extraSignature) doc.addImage(extraSignature, 'PNG', pw / 2 + 20, fy + 15, 40, 20);
             else if (audit.clientSignatureUrl) { try { const img = new Image(); img.src = API_URL + audit.clientSignatureUrl; doc.addImage(img, 'PNG', pw / 2 + 20, fy + 15, 40, 20); } catch (e) { } }

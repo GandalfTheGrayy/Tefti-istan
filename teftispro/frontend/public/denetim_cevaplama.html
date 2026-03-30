@@ -85,7 +85,7 @@
                     style="border:1px solid transparent;">Denetçi</button>
                 <button id="sigTabclient" onclick="switchSignatureTab('client')"
                     class="flex-1 py-2 rounded-lg text-sm font-medium transition-colors"
-                    style="border:1px solid transparent;">Karşı Taraf</button>
+                    style="border:1px solid transparent;">Şube Yetkilisi</button>
             </div>
             <p id="signatureTitle" class="text-sm mb-2 text-center" style="color:var(--text-muted);">İmza Alanı</p>
             <div class="bg-white rounded-xl p-2 mb-4"><canvas id="signatureCanvas"
@@ -304,7 +304,7 @@
                 if (t === type) { btn.style.background = 'rgba(16,185,129,0.15)'; btn.style.color = 'var(--color-accent)'; btn.style.borderColor = 'var(--color-accent)'; }
                 else { btn.style.background = ''; btn.style.color = 'var(--text-secondary)'; btn.style.borderColor = 'transparent'; }
             });
-            document.getElementById('signatureTitle').textContent = type === 'auditor' ? 'Denetçi İmzası' : 'Karşı Taraf İmzası';
+            document.getElementById('signatureTitle').textContent = type === 'auditor' ? 'Denetçi İmzası' : 'Şube Yetkilisi İmzası';
             initSignatureCanvas();
         }
 

@@ -1029,6 +1029,42 @@ body {
     box-shadow: 0 0 0 2px var(--bg-card), 0 0 0 4px var(--text-primary);
 }
 
+/* ---------- Sidebar Submenu ---------- */
+.menu-parent-group {
+    margin-bottom: 0.125rem;
+}
+
+.menu-submenu {
+    overflow: hidden;
+    transition: max-height 0.25s ease;
+}
+
+.menu-submenu .menu-child {
+    position: relative;
+    margin-left: 0.25rem;
+    transition: all 0.15s ease;
+}
+
+.menu-submenu .menu-child::before {
+    content: '';
+    position: absolute;
+    left: 1.25rem;
+    top: 50%;
+    width: 6px;
+    height: 1px;
+    background: var(--border-color);
+    transform: translateY(-50%);
+}
+
+.menu-submenu .menu-child:hover::before,
+.menu-submenu .menu-child.menu-active::before {
+    background: var(--color-accent);
+}
+
+.rotate-180 {
+    transform: rotate(180deg);
+}
+
 /* ---------- Responsive ---------- */
 @media (max-width: 1024px) {
     .tp-table th,
