@@ -6,7 +6,8 @@
   "scripts": {
     "dev": "node src/server.js",
     "start": "node src/server.js",
-    "seed": "node prisma/seed.js"
+    "seed": "node prisma/seed.js",
+    "denetimSimulasyon": "node prisma/denetimSimulasyon.js"
   },
   "dependencies": {
     "@prisma/client": "^5.22.0",
